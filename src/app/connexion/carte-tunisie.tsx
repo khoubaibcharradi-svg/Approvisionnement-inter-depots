@@ -17,6 +17,8 @@ export function CarteTunisie() {
       viewBox="-115 0 510 631"
       className="mx-auto block h-auto w-full lg:h-full lg:w-auto lg:max-w-full"
     >
+      {/* Crédit exigé par la licence CC BY 4.0 du fond de carte : affiché au survol de la carte. */}
+      <title>Fond de carte : geoBoundaries (CC BY 4.0)</title>
       <g stroke="#ffffff" strokeWidth="1" strokeLinejoin="round">
         <path fill="#cbd5e1" d={TRACES.AUTRES} />
         {ZONES.map((z) => (
