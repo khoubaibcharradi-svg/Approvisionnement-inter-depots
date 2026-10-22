@@ -111,7 +111,7 @@ Le portail n'écoute que sur `127.0.0.1:3000`. Seul Nginx est exposé.
 
 Pour autoriser `deploy/mettre-a-jour.sh` à redémarrer le service sans mot de passe :
 ```bash
-echo 'appro ALL=(root) NOPASSWD: /usr/bin/systemctl restart appro' | sudo tee /etc/sudoers.d/appro
+echo 'appro ALL=(root) NOPASSWD: /usr/bin/systemctl restart appro, /usr/bin/systemctl restart appro-test' | sudo tee /etc/sudoers.d/appro
 ```
 
 ## 5. Nginx et HTTPS
@@ -157,6 +157,58 @@ Le script enchaîne : sauvegarde de la base, récupération du code, dépendance
 2. Menu **Utilisateurs** : vérifie les comptes et crée les agents dépôts. Transmets à chacun son mot de passe provisoire.
 3. Menus **Magasins**, **Véhicules** et **Catalogue SKU** : agences, véhicules, prix de revient.
 4. **Ne charge pas les données de test** (`donnees-test-comptes-rendus.sql`) en production.
+
+## 9. Environnement de recette (branche `test`) sur le même VPS
+
+L'environnement de recette est une deuxième installation, séparée de la production :
+
+| | Production | Recette |
+|---|---|---|
+| Branche | `prod` | `test` |
+| Dossier | `/opt/appro` | `/opt/appro-test` |
+| Base MySQL | `appro` | `appro_test` (le nom doit contenir « test ») |
+| Service / port | `appro` / 3000 | `appro-test` / 3001 |
+| Adresse | `appro.ton-domaine.tn` | `test.appro.ton-domaine.tn` (protégée par mot de passe Nginx) |
+
+1. **DNS** : un enregistrement A `test.appro.ton-domaine.tn` vers l'IP du VPS.
+2. **Base** (`sudo mysql`) :
+   ```sql
+   CREATE DATABASE appro_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'appro_test'@'localhost' IDENTIFIED BY 'AUTRE_MOT_DE_PASSE_LONG';
+   GRANT ALL PRIVILEGES ON appro_test.* TO 'appro_test'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+3. **Code et configuration** :
+   ```bash
+   sudo mkdir /opt/appro-test && sudo chown appro:appro /opt/appro-test
+   sudo -u appro git clone --branch test https://github.com/khoubaibcharradi-svg/Approvisionnement-inter-depots.git /opt/appro-test
+   cd /opt/appro-test && sudo -u appro npm ci --no-audit --no-fund
+   sudo -u appro cp .env.example .env && sudo -u appro nano .env && sudo chmod 600 .env
+   ```
+   Dans ce `.env` : `DATABASE_URL` vers `appro_test` avec l'utilisateur `appro_test`, un **autre** `SESSION_SECRET` (`openssl rand -hex 48`) et `BACKUP_HEURE="03:00"`.
+4. **Données** : soit des données neuves (`npx prisma migrate deploy && npm run db:seed`), soit une **copie anonymisée de la production** :
+   ```bash
+   sudo -u appro bash /opt/appro-test/deploy/copier-prod-vers-test.sh
+   ```
+   Le script sauvegarde la production, la restaure dans `appro_test`, puis exécute `deploy/anonymiser-test.sql` :
+   - identifiants remplacés (`sup01`, `cv01`, `agent01`…), seul `admin` étant conservé ;
+   - noms et chauffeurs remplacés ;
+   - textes RH masqués et journal d'audit vidé ;
+   - mot de passe unique **`Recette2026!`** pour tous les comptes.
+
+   Il refuse de s'exécuter si la base cible ne contient pas « test » ou si c'est la base de production. Les pièces jointes ne sont pas copiées.
+5. **Build, service et Nginx** :
+   ```bash
+   cd /opt/appro-test && sudo -u appro npm run build
+   sudo cp deploy/appro-test.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now appro-test
+   sudo apt -y install apache2-utils && sudo htpasswd -c /etc/nginx/appro-test.htpasswd recette
+   sudo cp deploy/nginx-appro-test.conf /etc/nginx/sites-available/appro-test
+   sudo sed -i 's/test.appro.exemple.tn/test.appro.ton-domaine.tn/' /etc/nginx/sites-available/appro-test
+   sudo ln -s /etc/nginx/sites-available/appro-test /etc/nginx/sites-enabled/appro-test
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d test.appro.ton-domaine.tn --redirect -n
+   ```
+6. **Mises à jour de la recette** : `sudo -u appro bash /opt/appro-test/deploy/mettre-a-jour.sh test`
 
 ## Dépannage
 
