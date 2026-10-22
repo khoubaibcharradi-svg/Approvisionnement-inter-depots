@@ -4,8 +4,12 @@
 #   branche : prod (par défaut, serveur de production) ou test (serveur de recette)
 set -euo pipefail
 BRANCHE="${1:-prod}"
-case "$BRANCHE" in prod|test) ;; *) echo "Branche refusée : $BRANCHE (prod ou test)"; exit 1 ;; esac
-cd /opt/appro
+case "$BRANCHE" in
+  prod) DOSSIER=/opt/appro;      SERVICE=appro;      PORT=3000 ;;
+  test) DOSSIER=/opt/appro-test; SERVICE=appro-test; PORT=3001 ;;
+  *) echo "Branche refusée : $BRANCHE (prod ou test)"; exit 1 ;;
+esac
+cd "$DOSSIER"
 
 echo "== 1/5 Sauvegarde de la base avant mise à jour"
 npm run db:backup
@@ -24,7 +28,7 @@ npx prisma migrate deploy
 
 echo "== 5/5 Build et redémarrage"
 npm run build
-sudo systemctl restart appro
+sudo systemctl restart "$SERVICE"
 sleep 5
-systemctl --no-pager --lines=5 status appro
-curl -fsS -o /dev/null -w "Réponse HTTP locale : %{http_code}\n" http://127.0.0.1:3000/connexion
+systemctl --no-pager --lines=5 status "$SERVICE"
+curl -fsS -o /dev/null -w "Réponse HTTP locale : %{http_code}\n" "http://127.0.0.1:$PORT/connexion"

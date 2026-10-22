@@ -31,4 +31,6 @@ correctif urgent ── branche « correctif/… » ───────┘ pui
 
 - Ne jamais pousser directement sur `prod` : seulement des fusions depuis `test` (ou un correctif urgent).
 - Les **migrations Prisma** suivent le même chemin. Elles s'appliquent avec `npx prisma migrate deploy` sur chaque serveur (le script de mise à jour le fait).
-- Chaque environnement a **sa propre base** et **son propre `.env`** (`SESSION_SECRET` différent). Ne jamais copier la base de production vers le test sans anonymiser les données personnelles.
+- Chaque environnement a **sa propre base** et **son propre `.env`** (`SESSION_SECRET` différent).
+- Recharger la recette avec des données réelles uniquement via `deploy/copier-prod-vers-test.sh`, qui anonymise la copie (voir `docs/DEPLOIEMENT-OVH.md`, section 9). Jamais de copie brute.
+- `prod` est protégée sur GitHub : fusion par pull request depuis `test` uniquement.
