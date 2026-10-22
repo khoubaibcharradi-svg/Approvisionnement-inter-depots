@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Journaux et sauvegardes produits à l'exécution (hors dépôt Git)
+logs/*
+!logs/.gitkeep
+backups/*
+!backups/.gitkeep
+
+# Données internes (noms, stocks, ventes) : jamais dans le dépôt
+prisma/data/
+docs/*.docx

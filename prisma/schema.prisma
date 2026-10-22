@@ -1,0 +1,406 @@
+// Portail d'approvisionnement inter-dépôts — schéma MySQL 8
+//
+// Conventions :
+// - Clés métier uniquement (aucun identifiant technique auto-incrémenté) : code article,
+//   code canal, code dépôt, login, numéro de demande « DA-000001 », etc.
+//   Les clés étrangères sont en ON UPDATE CASCADE pour qu'un code métier puisse être renommé.
+// - Toutes les tables de référence et de transaction portent les colonnes de cycle de vie :
+//   isActif, isDeleted, dateCreation/creePar, dateModification/modifiePar,
+//   dateSuppression/supprimePar. Aucune ligne n'est supprimée physiquement (suppression logique).
+// - Les tables de traçabilité (journal_audit, historique_demande) sont en ajout seul :
+//   elles n'ont volontairement ni isDeleted ni date de modification (journal inaltérable).
+// - « version » sert au verrouillage optimiste (plusieurs utilisateurs sur la même demande).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum TypeDepot {
+  CENTRAL
+  REGIONAL
+}
+
+enum StatutDemande {
+  A_VALIDER
+  A_APPROUVER
+  APPROUVEE
+  EN_PREPARATION
+  EXPEDIEE
+  REJETEE
+}
+
+enum Unite {
+  PIECE
+  CARTON
+}
+
+enum DecisionLigne {
+  ACCORD
+  REFUS
+  MODIFICATION
+}
+
+enum StatutModification {
+  EN_ATTENTE
+  ACCEPTEE
+  REFUSEE
+  RETIREE
+  ANNULEE
+}
+
+enum TypeImport {
+  CATALOGUE
+  STOCK
+}
+
+// ───────────────────────────── Référentiels ─────────────────────────────
+
+model Role {
+  code             String    @id @db.VarChar(30)
+  libelle          String    @db.VarChar(80)
+  ordre            Int       @default(0)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  utilisateurs Utilisateur[]
+
+  @@map("role")
+}
+
+model Canal {
+  code             String    @id @db.VarChar(30)
+  libelle          String    @db.VarChar(80)
+  ordre            Int       @default(0)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  affectations Affectation[]
+  demandes     Demande[]
+
+  @@map("canal")
+}
+
+model Depot {
+  code             String    @id @db.VarChar(30)
+  libelle          String    @db.VarChar(80)
+  type             TypeDepot
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  affectations Affectation[]
+  demandes     Demande[]
+
+  @@map("depot")
+}
+
+model Famille {
+  code             String    @id @db.VarChar(60)
+  libelle          String    @db.VarChar(100)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  articles Article[]
+
+  @@map("famille")
+}
+
+/// Stock et quota en pièces ; rotation en cartons par mois (RG-08).
+model Article {
+  codeArticle      String    @id @db.VarChar(30)
+  designation      String    @db.VarChar(200)
+  codeFamille      String    @db.VarChar(60)
+  /// Pièces par carton ; null tant que la logistique ne l'a pas renseigné.
+  pcb              Int?
+  ean              String?   @db.VarChar(20)
+  stockPieces      Int       @default(0)
+  quotaPieces      Int       @default(0)
+  rotationCartons  Decimal?  @db.Decimal(12, 2)
+  dateMajStock     DateTime?
+  sourceStock      String?   @db.VarChar(150)
+  version          Int       @default(0)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  famille Famille        @relation(fields: [codeFamille], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  lignes  LigneDemande[]
+
+  @@index([codeFamille])
+  @@index([designation])
+  @@index([isDeleted, isActif])
+  @@map("article")
+}
+
+// ───────────────────────────── Utilisateurs ─────────────────────────────
+
+model Utilisateur {
+  login                    String    @id @db.VarChar(50)
+  nomComplet               String    @db.VarChar(100)
+  email                    String?   @db.VarChar(150)
+  codeRole                 String    @db.VarChar(30)
+  motDePasseHash           String    @db.VarChar(100)
+  doitChangerMotDePasse    Boolean   @default(true)
+  dateChangementMotDePasse DateTime?
+  nbEchecsConnexion        Int       @default(0)
+  verrouilleJusqua         DateTime?
+  derniereConnexion        DateTime?
+  /// Incrémenté à chaque changement de mot de passe ou désactivation : invalide les sessions ouvertes.
+  versionSession           Int       @default(0)
+  isActif                  Boolean   @default(true)
+  isDeleted                Boolean   @default(false)
+  dateCreation             DateTime  @default(now())
+  creePar                  String?   @db.VarChar(50)
+  dateModification         DateTime  @updatedAt
+  modifiePar               String?   @db.VarChar(50)
+  dateSuppression          DateTime?
+  supprimePar              String?   @db.VarChar(50)
+
+  role         Role          @relation(fields: [codeRole], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  affectations Affectation[]
+  demandes     Demande[]
+
+  @@index([codeRole])
+  @@map("utilisateur")
+}
+
+/// Canaux d'un utilisateur (Chef de Vente, Superviseur) et dépôt imposé pour un Superviseur.
+model Affectation {
+  login            String    @db.VarChar(50)
+  codeCanal        String    @db.VarChar(30)
+  codeDepot        String?   @db.VarChar(30)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  utilisateur Utilisateur @relation(fields: [login], references: [login], onUpdate: Cascade, onDelete: Restrict)
+  canal       Canal       @relation(fields: [codeCanal], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  depot       Depot?      @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([login, codeCanal])
+  @@index([codeCanal])
+  @@index([codeDepot])
+  @@map("affectation")
+}
+
+// ───────────────────────────── Demandes ─────────────────────────────
+
+model Demande {
+  numero           String        @id @db.VarChar(20)
+  codeCanal        String        @db.VarChar(30)
+  codeDepot        String        @db.VarChar(30)
+  loginSaisie      String        @db.VarChar(50)
+  statut           StatutDemande @default(A_VALIDER)
+  /// Étape à laquelle la demande a été rejetée : 1 Chef de Vente, 2 Dir. commercial, 3 Radès.
+  etapeRejet       Int?
+  motif            String?       @db.Text
+  dateSaisie       DateTime      @default(now())
+  version          Int           @default(0)
+  isActif          Boolean       @default(true)
+  isDeleted        Boolean       @default(false)
+  dateCreation     DateTime      @default(now())
+  creePar          String?       @db.VarChar(50)
+  dateModification DateTime      @updatedAt
+  modifiePar       String?       @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?       @db.VarChar(50)
+
+  canal         Canal                 @relation(fields: [codeCanal], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  depot         Depot                 @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  saisiePar     Utilisateur           @relation(fields: [loginSaisie], references: [login], onUpdate: Cascade, onDelete: Restrict)
+  lignes        LigneDemande[]
+  historique    HistoriqueDemande[]
+  modifications DemandeModification[]
+
+  @@index([statut, dateSaisie])
+  @@index([codeCanal, statut])
+  @@index([codeDepot])
+  @@index([loginSaisie])
+  @@index([dateSaisie])
+  @@map("demande")
+}
+
+model LigneDemande {
+  numeroDemande          String         @db.VarChar(20)
+  numeroLigne            Int
+  codeArticle            String         @db.VarChar(30)
+  unite                  Unite
+  quantiteInitiale       Int
+  quantite               Int
+  dateLivraisonSouhaitee DateTime       @db.Date
+  dateExpeditionPrevue   DateTime?      @db.Date
+  decisionDepot          DecisionLigne?
+  motifDecision          String?        @db.VarChar(500)
+  isActif                Boolean        @default(true)
+  isDeleted              Boolean        @default(false)
+  dateCreation           DateTime       @default(now())
+  creePar                String?        @db.VarChar(50)
+  dateModification       DateTime       @updatedAt
+  modifiePar             String?        @db.VarChar(50)
+  dateSuppression        DateTime?
+  supprimePar            String?        @db.VarChar(50)
+
+  demande Demande @relation(fields: [numeroDemande], references: [numero], onUpdate: Cascade, onDelete: Restrict)
+  article Article @relation(fields: [codeArticle], references: [codeArticle], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([numeroDemande, numeroLigne])
+  @@index([codeArticle])
+  @@map("ligne_demande")
+}
+
+/// Historique fonctionnel visible sur chaque demande (ajout seul).
+model HistoriqueDemande {
+  numeroDemande   String   @db.VarChar(20)
+  numeroEvenement Int
+  horodatage      DateTime @default(now()) @db.DateTime(3)
+  login           String   @db.VarChar(50)
+  libelle         String   @db.Text
+
+  demande Demande @relation(fields: [numeroDemande], references: [numero], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([numeroDemande, numeroEvenement])
+  @@map("historique_demande")
+}
+
+/// Demande de modification (RG-04) tranchée par le détenteur courant.
+model DemandeModification {
+  numeroDemande      String             @db.VarChar(20)
+  numeroModification Int
+  loginDemandeur     String             @db.VarChar(50)
+  codeRoleDemandeur  String             @db.VarChar(30)
+  statut             StatutModification @default(EN_ATTENTE)
+  motif              String             @db.Text
+  resume             String             @db.Text
+  /// [{ numeroLigne, quantite, dateLivraisonSouhaitee, dateExpeditionPrevue }]
+  contenu            Json
+  loginDecision      String?            @db.VarChar(50)
+  dateDecision       DateTime?
+  motifDecision      String?            @db.Text
+  isActif            Boolean            @default(true)
+  isDeleted          Boolean            @default(false)
+  dateCreation       DateTime           @default(now())
+  creePar            String?            @db.VarChar(50)
+  dateModification   DateTime           @updatedAt
+  modifiePar         String?            @db.VarChar(50)
+  dateSuppression    DateTime?
+  supprimePar        String?            @db.VarChar(50)
+
+  demande Demande @relation(fields: [numeroDemande], references: [numero], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([numeroDemande, numeroModification])
+  @@index([statut])
+  @@map("demande_modification")
+}
+
+// ───────────────────────────── Technique ─────────────────────────────
+
+/// Compteurs des numéros métier (DA-000001, IMP-000001…), incrémentés de façon atomique.
+model Compteur {
+  cle              String   @id @db.VarChar(30)
+  valeur           Int      @default(0)
+  dateModification DateTime @updatedAt
+
+  @@map("compteur")
+}
+
+model ImportFichier {
+  numero           String     @id @db.VarChar(20)
+  type             TypeImport
+  nomFichier       String     @db.VarChar(255)
+  login            String     @db.VarChar(50)
+  nbLignes         Int        @default(0)
+  nbAjoutes        Int        @default(0)
+  nbMisAJour       Int        @default(0)
+  nbIgnores        Int        @default(0)
+  nbQuotasAjustes  Int        @default(0)
+  detail           Json?
+  isActif          Boolean    @default(true)
+  isDeleted        Boolean    @default(false)
+  dateCreation     DateTime   @default(now())
+  creePar          String?    @db.VarChar(50)
+  dateModification DateTime   @updatedAt
+  modifiePar       String?    @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?    @db.VarChar(50)
+
+  @@map("import_fichier")
+}
+
+/// Paramètres modifiables sans redéploiement (verrouillage, politique de mot de passe…).
+model Parametre {
+  cle              String    @id @db.VarChar(60)
+  valeur           String    @db.VarChar(255)
+  description      String?   @db.VarChar(255)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  @@map("parametre")
+}
+
+/// Journal d'audit inaltérable : qui, quand, quoi, valeurs avant/après (module 9).
+/// La référence est un ULID (horodaté, triable) : il n'existe pas de clé métier naturelle pour un événement.
+model JournalAudit {
+  reference  String   @id @db.Char(26)
+  horodatage DateTime @default(now()) @db.DateTime(3)
+  login      String?  @db.VarChar(50)
+  codeRole   String?  @db.VarChar(30)
+  action     String   @db.VarChar(60)
+  entite     String?  @db.VarChar(40)
+  cleEntite  String?  @db.VarChar(80)
+  avant      Json?
+  apres      Json?
+  detail     String?  @db.Text
+  succes     Boolean  @default(true)
+  adresseIp  String?  @db.VarChar(45)
+  userAgent  String?  @db.VarChar(255)
+
+  @@index([horodatage])
+  @@index([login, horodatage])
+  @@index([entite, cleEntite])
+  @@index([action])
+  @@map("journal_audit")
+}

@@ -1,0 +1,131 @@
+# Approvisionnement inter-dépôts
+
+Portail d'approvisionnement commercial et de traçabilité inter-dépôts (dépôt central de Radès et dépôts régionaux).
+Il remplace le prototype HTML validé et applique le cahier des charges v2.0.
+
+**Stack** : Next.js 16 (App Router, Server Actions) · TypeScript · MySQL 8 · Prisma 6 · Tailwind CSS 4 · Vitest.
+
+## Démarrage
+
+Prérequis : Node.js 22 et un serveur MySQL 8 (base créée en `utf8mb4`).
+
+```bash
+npm install
+cp .env.example .env          # renseigner DATABASE_URL, SESSION_SECRET, SEED_MOT_DE_PASSE_INITIAL
+npx prisma migrate deploy     # crée les tables
+npm run db:seed               # charge le fichier de paramétrage (articles, stock, rotation, utilisateurs)
+npm run dev                   # http://localhost:3000
+```
+
+Le fichier de paramétrage (`prisma/data/parametrage.xlsx` par défaut, ou `SEED_FICHIER`) contient des données internes : il n'est pas versionné et doit être déposé à la main sur le serveur. Feuilles attendues : Produits, Ventes, Stock, Famille, Responsables, Dépôts.
+
+Production : `npm run build` puis `npm start` (sortie `standalone` disponible dans `.next/standalone`).
+
+Commandes utiles :
+
+| Commande | Rôle |
+|---|---|
+| `npm test` | Tests des règles de gestion (workflow, quotas, unités) |
+| `npm run typecheck` | Vérification TypeScript |
+| `npm run db:migrate` | Nouvelle migration après modification de `prisma/schema.prisma` (développement) |
+| `npm run db:backup` | Sauvegarde texte de la base |
+| `npm run db:restore -- <fichier> --confirmer` | Restauration (une sauvegarde de l'état courant est faite avant) |
+
+### Comptes
+
+Le seed crée un compte par responsable de la feuille « Responsables » : identifiant `prenom.initiale` (ex. « Ali B » → `ali.b`), plus un compte `admin`.
+Tous démarrent avec `SEED_MOT_DE_PASSE_INITIAL` et **doivent le changer à la première connexion**.
+
+## Base de données
+
+### Clés métier
+
+Aucun identifiant technique auto-incrémenté : chaque table a pour clé primaire sa clé métier.
+
+| Table | Clé primaire |
+|---|---|
+| `article` | `codeArticle` (ex. `P101001`) |
+| `canal`, `depot`, `famille`, `role` | `code` (ex. `GMS`, `RADES`, `CHIPS`, `CHEF_VENTE`) |
+| `utilisateur` | `login` |
+| `affectation` | (`login`, `codeCanal`) |
+| `demande` | `numero` (`DA-000001`, généré par la table `compteur`) |
+| `ligne_demande` | (`numeroDemande`, `numeroLigne`) |
+| `historique_demande` | (`numeroDemande`, `numeroEvenement`) |
+| `demande_modification` | (`numeroDemande`, `numeroModification`) |
+| `import_fichier` | `numero` (`IMP-000001`) |
+| `parametre` | `cle` |
+| `journal_audit` | `reference` (ULID horodaté : un événement n'a pas de clé métier naturelle) |
+
+Les clés étrangères sont en `ON UPDATE CASCADE` : le Directeur commercial peut renommer un code SKU, et les lignes de demande suivent.
+
+### Cycle de vie des lignes
+
+Chaque table de référence ou de transaction porte :
+
+`isActif`, `isDeleted`, `dateCreation`, `creePar`, `dateModification`, `modifiePar`, `dateSuppression`, `supprimePar`.
+
+- **Suppression logique uniquement.** Le client Prisma (`src/lib/prisma.ts`) exclut automatiquement `isDeleted = true` de toutes les lectures et **interdit** `delete`/`deleteMany`. Pour supprimer, on fait un `update` avec `champsSuppression(login)`.
+- `isActif = false` désactive sans supprimer : un article inactif n'est plus proposé à la saisie, un utilisateur inactif ne peut plus se connecter.
+- Les relations chargées par `include` ne sont pas filtrées automatiquement : on y ajoute `where: { isDeleted: false }`.
+- `journal_audit` et `historique_demande` sont en **ajout seul** (journal inaltérable) : ils n'ont pas de colonnes de suppression.
+
+### Accès concurrents (≈ 60 utilisateurs)
+
+- `demande.version` et `article.version` assurent un **verrouillage optimiste**. Si deux personnes agissent en même temps sur la même demande, la seconde reçoit « modifiée par un autre utilisateur, rechargez la page » au lieu d'écraser la première.
+- Les numéros `DA-…` sont attribués dans une transaction sur la table `compteur` : pas de doublon même avec des saisies simultanées.
+- Le pool de connexions se règle dans `DATABASE_URL` (`connection_limit=20`). Les index couvrent les listes par statut, canal, dépôt, saisisseur et date.
+
+## Sécurité et droits
+
+- Les mots de passe sont hachés avec bcrypt (coût 12). Politique : au moins 10 caractères, avec une majuscule, une minuscule et un chiffre ; ils sont modifiables via la table `parametre`.
+- Le compte est verrouillé 15 minutes après 5 échecs. L'administrateur peut déverrouiller le compte ou réinitialiser le mot de passe : un mot de passe temporaire est affiché une seule fois.
+- La session est un cookie `httpOnly` signé (HS256). L'utilisateur est **relu en base à chaque requête** : un compte désactivé, supprimé ou dont le mot de passe a changé perd immédiatement ses sessions.
+- **Le cloisonnement est appliqué côté serveur**, pas seulement dans l'interface :
+  - le superviseur ne voit que ses demandes, et le chef de vente que son circuit (filtre SQL, `src/lib/demandes/lecture.ts`) ;
+  - le stock et les quotas ne sont jamais chargés pour un superviseur ou un chef de vente ;
+  - chaque action revérifie les règles (`src/lib/workflow.ts`) avant d'écrire.
+
+Les règles du cahier des charges (RG-01 à RG-08) sont regroupées dans `src/lib/workflow.ts` et testées dans `src/lib/workflow.test.ts`.
+
+## Journalisation (obligatoire)
+
+Deux niveaux complémentaires :
+
+1. **Fichier de log** : `logs/app-AAAA-MM-JJ.log`, un fichier par jour, une ligne JSON par événement (connexions, actions, imports, sauvegardes, erreurs). Les erreurs sont aussi copiées dans `logs/erreurs-AAAA-MM-JJ.log`. Conservation : `LOG_RETENTION_JOURS` (5 ans par défaut, cf. §6 du cahier des charges).
+2. **Journal d'audit en base** (`journal_audit`) : qui, quand, quoi, valeurs avant et après, adresse IP. Les connexions réussies ou échouées, les accès refusés et les tentatives hors droits y figurent aussi. Il est consultable dans le menu « Journal d'audit ».
+
+Chaque événement d'audit est écrit à la fois dans la base (dans la même transaction que la modification) et dans le fichier. Les fichiers de log sont téléchargeables par l'administrateur (menu « Sauvegardes »).
+
+## Sauvegardes (fichier texte)
+
+- **Format** : `backups/sauvegarde-AAAAMMJJ-HHMMSS.sql.txt`. C'est un fichier texte lisible, composé d'instructions `INSERT` (une par ligne, toutes les tables). Un fichier `.sha256` l'accompagne pour contrôler son intégrité.
+- **Automatique** : chaque jour à `BACKUP_HEURE` (02:00 par défaut), lancée par le serveur. Les sauvegardes de plus de `BACKUP_RETENTION_JOURS` jours sont ensuite purgées.
+  - Si plusieurs instances tournent : mettre `BACKUP_AUTO=false` et planifier `npm run db:backup` par cron.
+- **Manuelle** : bouton dans « Sauvegardes » (administrateur), ou `npm run db:backup`.
+- **Restauration** : `npm run db:restore -- <fichier> --confirmer`. Le script vérifie l'empreinte SHA-256 et le marqueur de fin, sauvegarde l'état courant, puis rejoue le fichier dans une transaction.
+- **Important** : copier régulièrement le dossier `backups/` sur un autre serveur ou un stockage externe. Une sauvegarde qui reste sur la même machine ne protège pas contre une panne de disque.
+
+## Structure
+
+```
+prisma/schema.prisma          Schéma MySQL (clés métier, cycle de vie)
+prisma/seed.ts                Chargement du fichier de paramétrage
+src/lib/workflow.ts           Règles de gestion (pures, testées)
+src/lib/demandes/service.ts   Actions métier : transaction, contrôle de version, historique, audit
+src/lib/demandes/lecture.ts   Requêtes filtrées par droits
+src/lib/journal.ts            Fichiers de log
+src/lib/audit.ts              Journal d'audit (base et fichier)
+src/lib/sauvegarde.ts         Sauvegarde et restauration texte
+src/lib/auth/                 Mots de passe, jeton, session
+src/app/(portail)/            Pages : demandes, catalogue, audit, statistiques, administration
+scripts/                      Sauvegarde et restauration en ligne de commande
+```
+
+## Reste à réaliser (cahier des charges §8)
+
+- Module 7 : réception, écarts, photos de casse et avoirs.
+- Notifications par e-mail, SMS ou push (aujourd'hui, une trace dans l'historique de la demande).
+- Synchronisation automatique avec l'ERP par API (aujourd'hui, import Excel/CSV du stock et du catalogue).
+- Mode hors-ligne (PWA) pour les superviseurs.
+- Fenêtre de saisie par canal, allocation prioritaire en cas de rupture, OTIF.
+- Points à valider (§10) : stock par dépôt ou stock unique, formule de rotation, unité du stock ERP, retour au Directeur commercial après modification par Radès.
