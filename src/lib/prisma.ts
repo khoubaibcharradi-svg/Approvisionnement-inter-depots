@@ -23,6 +23,7 @@ const MODELES_SUPPRESSION_LOGIQUE = new Set([
   "Parametre",
   "Societe",
   "Magasin",
+  "Vehicule",
   "CompteRendu",
   "CompteRenduStock",
   "CompteRenduVehicule",

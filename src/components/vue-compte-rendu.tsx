@@ -15,6 +15,18 @@ function Bloc({ titre, children }: { titre: string; children: React.ReactNode })
     </section>
   );
 }
+function Annexes({ cr, rubrique, titre }: { cr: Detail; rubrique: string; titre: string }) {
+  const liste = cr.pieces.filter((p) => p.rubrique === rubrique);
+  return (
+    <div className="text-sm">
+      <span className="font-medium">{titre} :</span>{" "}
+      {liste.length ? liste.map((p, i) => (
+        <span key={p.numeroPiece}>{i > 0 && " · "}<a className="text-marque underline" href={`/api/comptes-rendus/${cr.numero}/pieces/${p.numeroPiece}`}>{p.nomFichier}</a></span>
+      )) : <span className="note">aucune</span>}
+    </div>
+  );
+}
+
 function Obs({ titre, texte }: { titre: string; texte: string }) {
   return (
     <p className="text-sm"><span className="font-medium">{titre} :</span> <span className="whitespace-pre-line">{texte || <span className="note">non renseigné</span>}</span></p>
@@ -64,20 +76,15 @@ export function VueCompteRendu({ cr, societes }: { cr: Detail; societes: Record<
           </table>
         </div>
         <Obs titre="Justification des écarts" texte={s.justificationEcarts} />
-        <div className="text-sm">
-          <span className="font-medium">États de stock annexés :</span>{" "}
-          {cr.pieces.length ? cr.pieces.map((p, i) => (
-            <span key={p.numeroPiece}>{i > 0 && " · "}<a className="text-marque underline" href={`/api/comptes-rendus/${cr.numero}/pieces/${p.numeroPiece}`}>{p.nomFichier}</a></span>
-          )) : <span className="note">aucun</span>}
-        </div>
+        <Annexes cr={cr} rubrique="STOCK" titre="États de stock annexés" />
       </Bloc>
 
       <Bloc titre="Véhicules traités">
         {s.aucunVehicule ? <p className="text-sm">Aucun véhicule traité.</p> : (
           <div className="overflow-x-auto">
             <table className="tableau">
-              <thead><tr><th>Société</th><th>Vendeur / chauffeur</th><th>Matricule</th><th>Entrée</th><th>Sortie</th><th>Observations</th></tr></thead>
-              <tbody>{s.vehicules.map((v, i) => <tr key={i}><td>{societes[v.codeSociete] ?? v.codeSociete}</td><td>{v.vendeurChauffeur}</td><td>{v.matricule}</td><td>{v.heureEntree}</td><td>{v.heureSortie}</td><td>{v.observations}</td></tr>)}</tbody>
+              <thead><tr><th>Matricule</th><th>Société</th><th>Agence</th><th>Vendeur / chauffeur</th><th>Entrée</th><th>Sortie</th><th>Observations</th></tr></thead>
+              <tbody>{s.vehicules.map((v, i) => <tr key={i}><td>{v.matricule}</td><td>{societes[v.codeSociete] ?? v.codeSociete}</td><td>{v.codeMagasin ? cr.magasins[v.codeMagasin]?.libelle ?? v.codeMagasin : "—"}</td><td>{v.vendeurChauffeur}</td><td>{v.heureEntree}</td><td>{v.heureSortie}</td><td>{v.observations}</td></tr>)}</tbody>
             </table>
           </div>
         )}
@@ -93,6 +100,7 @@ export function VueCompteRendu({ cr, societes }: { cr: Detail; societes: Record<
             </tbody>
           </table>
         </div>
+        <Annexes cr={cr} rubrique="RECETTES" titre="Pièces jointes" />
         <Obs titre="Observations" texte={s.observationsRecettes} />
       </Bloc>
 
@@ -123,6 +131,7 @@ export function VueCompteRendu({ cr, societes }: { cr: Detail; societes: Record<
             </tbody>
           </table>
         </div>
+        <Annexes cr={cr} rubrique="DEPENSES" titre="Justificatifs joints" />
         <Obs titre="Observations" texte={s.observationsDepenses} />
       </Bloc>
 

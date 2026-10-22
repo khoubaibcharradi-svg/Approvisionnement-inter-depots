@@ -38,6 +38,7 @@ export const schemaSaisie = z.object({
     .array(
       z.object({
         codeSociete: z.string().max(30),
+        codeMagasin: z.string().max(30).optional(),
         vendeurChauffeur: texte(100),
         matricule: texte(30),
         heureEntree: z.string().max(5),
@@ -119,6 +120,7 @@ function versSaisie(cr: CompteRenduComplet): SaisieCompteRendu {
     aucunVehicule: cr.aucunVehicule,
     vehicules: cr.vehicules.map((v) => ({
       codeSociete: v.codeSociete,
+      codeMagasin: v.codeMagasin ?? "",
       vendeurChauffeur: v.vendeurChauffeur,
       matricule: v.matricule,
       heureEntree: v.heureEntree,
@@ -186,12 +188,17 @@ function exigerAgent(a: UtilisateurCourant) {
 export async function chargerJournee(agent: UtilisateurCourant, dateJournee: string) {
   const codeDepot = exigerAgent(agent);
   const dates = await journeesAutorisees();
-  const [depot, magasins, societes, existant, veille] = await Promise.all([
+  const [depot, magasins, societes, existant, veille, vehicules] = await Promise.all([
     prisma.depot.findUniqueOrThrow({ where: { code: codeDepot } }),
     prisma.magasin.findMany({ where: { codeDepot, isActif: true }, include: { societe: true }, orderBy: [{ codeSociete: "asc" }, { libelle: "asc" }] }),
     prisma.societe.findMany({ where: { isActif: true }, orderBy: { ordre: "asc" } }),
     prisma.compteRendu.findFirst({ where: { codeDepot, dateJournee: enDate(dateJournee) }, include: inclusions }),
     precedent(prisma, codeDepot, dateJournee),
+    prisma.vehicule.findMany({
+      where: { codeDepot, isActif: true, magasin: { isActif: true, isDeleted: false } },
+      include: { magasin: { include: { societe: true } } },
+      orderBy: [{ codeMagasin: "asc" }, { matricule: "asc" }],
+    }),
   ]);
   const r = reprise(veille);
   let saisie: SaisieCompteRendu;
@@ -228,12 +235,21 @@ export async function chargerJournee(agent: UtilisateurCourant, dateJournee: str
     depot: { code: depot.code, libelle: depot.libelle },
     magasins: magasins.map((m) => ({ code: m.code, libelle: m.libelle, societe: m.societe.libelle, codeSociete: m.codeSociete })),
     societes: societes.map((s) => ({ code: s.code, libelle: s.libelle })),
+    vehicules: vehicules.map((v) => ({
+      matricule: v.matricule,
+      codeMagasin: v.codeMagasin,
+      magasin: v.magasin.libelle,
+      codeSociete: v.magasin.codeSociete,
+      societe: v.magasin.societe.libelle,
+      chauffeurHabituel: v.chauffeurHabituel ?? "",
+      description: v.description ?? "",
+    })),
     numero: existant?.numero ?? null,
     version: existant?.version ?? null,
     statut: existant?.statut ?? null,
     agent: existant?.agent.nomComplet ?? null,
     dateSoumission: existant?.dateSoumission ?? null,
-    pieces: (existant?.pieces ?? []).map((p) => ({ numeroPiece: p.numeroPiece, nomFichier: p.nomFichier, taille: p.taille })),
+    pieces: (existant?.pieces ?? []).map((p) => ({ numeroPiece: p.numeroPiece, rubrique: p.rubrique, nomFichier: p.nomFichier, taille: p.taille })),
     reprise: r ? { numero: r.numero, date: r.date, magasins: Object.keys(r.stockInitial), caisse: Object.keys(r.soldeVeille).length > 0 } : null,
     pieceObligatoire: (await parametreNombre("CR_PIECE_OBLIGATOIRE")) === 1,
     saisie,
@@ -265,8 +281,20 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
       const parCode = new Map(magasins.map((m) => [m.code, m]));
       const societes = new Set((await tx.societe.findMany({ where: { isActif: true } })).map((s) => s.code));
       for (const l of saisie.stocks) if (!parCode.has(l.codeMagasin)) throw new ErreurCompteRendu(`Magasin ${l.codeMagasin} hors de votre dépôt.`);
-      for (const x of [...saisie.vehicules, ...saisie.recettes]) {
+      for (const x of saisie.recettes) {
         if (x.codeSociete && !societes.has(x.codeSociete)) throw new ErreurCompteRendu(`Société inconnue : ${x.codeSociete}`);
+      }
+      // Véhicules : uniquement ceux du référentiel du dépôt ; société et agence viennent du référentiel.
+      const flotte = new Map(
+        (await tx.vehicule.findMany({ where: { codeDepot, isActif: true }, include: { magasin: true } })).map((v) => [v.matricule, v]),
+      );
+      for (const v of saisie.vehicules) {
+        if (!v.matricule) continue;
+        const ref = flotte.get(v.matricule.toUpperCase());
+        if (!ref) throw new ErreurCompteRendu(`Véhicule ${v.matricule} inconnu ou hors de votre dépôt : choisissez-le dans la liste.`);
+        v.matricule = ref.matricule;
+        v.codeMagasin = ref.codeMagasin;
+        v.codeSociete = ref.magasin.codeSociete;
       }
 
       // Continuité : stock initial et soldes veille repris du dernier compte rendu soumis.
@@ -277,7 +305,7 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
         saisie.soldeVeilleDepenses = r.soldeVeilleDepenses;
       }
 
-      let cr = await tx.compteRendu.findFirst({ where: { codeDepot, dateJournee: enDate(dateJournee) }, include: { pieces: { where: { isDeleted: false } } } });
+      let cr = await tx.compteRendu.findFirst({ where: { codeDepot, dateJournee: enDate(dateJournee) }, include: { pieces: { where: { isDeleted: false, rubrique: "STOCK" } } } });
       if (cr?.statut === "SOUMIS") throw new ErreurCompteRendu("Ce compte rendu est déjà soumis : il n'est plus modifiable.");
       if (cr && cr.version !== version) throw new ErreurCompteRendu("Le compte rendu a été modifié entre-temps (autre agent du dépôt). Rechargez la page.");
 
@@ -306,7 +334,7 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
         numero = await prochainNumero(tx, "COMPTE_RENDU", "CR");
         cr = await tx.compteRendu.create({
           data: { numero, codeDepot, dateJournee: enDate(dateJournee), loginAgent: agent.login, ...entete, creePar: agent.login },
-          include: { pieces: { where: { isDeleted: false } } },
+          include: { pieces: { where: { isDeleted: false, rubrique: "STOCK" } } },
         });
       } else {
         numero = cr.numero;
@@ -364,6 +392,7 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
 
       await lignesNumerotees("compteRenduVehicule", saisie.vehicules, (v) => ({
         codeSociete: v.codeSociete,
+        codeMagasin: v.codeMagasin || null,
         vendeurChauffeur: v.vendeurChauffeur,
         matricule: v.matricule.toUpperCase(),
         heureEntree: v.heureEntree,
@@ -457,7 +486,10 @@ async function brouillonDeLAgent(tx: Transaction, agent: UtilisateurCourant, num
   return cr;
 }
 
-export async function ajouterPiece(agent: UtilisateurCourant, numero: string, fichier: File) {
+export const RUBRIQUES_PIECES = ["STOCK", "RECETTES", "DEPENSES"] as const;
+export type Rubrique = (typeof RUBRIQUES_PIECES)[number];
+
+export async function ajouterPiece(agent: UtilisateurCourant, numero: string, rubrique: Rubrique, fichier: File) {
   const ext = fichier.name.toLowerCase().split(".").pop() ?? "";
   const typeMime = TYPES_PIECES[ext];
   if (!typeMime) throw new ErreurCompteRendu("Format accepté : PDF, Excel, CSV, JPG ou PNG.");
@@ -477,6 +509,7 @@ export async function ajouterPiece(agent: UtilisateurCourant, numero: string, fi
       data: {
         numeroCompteRendu: numero,
         numeroPiece,
+        rubrique,
         nomFichier: fichier.name.replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 255),
         typeMime,
         taille: fichier.size,
@@ -485,7 +518,7 @@ export async function ajouterPiece(agent: UtilisateurCourant, numero: string, fi
         creePar: agent.login,
       },
     });
-    await auditer({ action: "COMPTE_RENDU_PIECE_AJOUTEE", login: agent.login, codeRole: agent.role, entite: "CompteRendu", cleEntite: numero, apres: { piece: numeroPiece, fichier: fichier.name, taille: fichier.size, sha256 } }, tx);
+    await auditer({ action: "COMPTE_RENDU_PIECE_AJOUTEE", login: agent.login, codeRole: agent.role, entite: "CompteRendu", cleEntite: numero, apres: { piece: numeroPiece, rubrique, fichier: fichier.name, taille: fichier.size, sha256 } }, tx);
   });
 }
 
@@ -538,8 +571,10 @@ export async function detailCompteRendu(numero: string) {
     agent: `${cr.agent.nomComplet} (${cr.agent.login})`,
     dateSoumission: cr.dateSoumission,
     dateModification: cr.dateModification,
-    magasins: Object.fromEntries(cr.stocks.map((l) => [l.codeMagasin, { libelle: l.magasin.libelle, societe: l.magasin.societe.libelle }])),
-    pieces: cr.pieces.map((p) => ({ numeroPiece: p.numeroPiece, nomFichier: p.nomFichier, taille: p.taille })),
+    magasins: Object.fromEntries(
+      (await prisma.magasin.findMany({ where: { codeDepot: cr.codeDepot }, include: { societe: true } })).map((m) => [m.code, { libelle: m.libelle, societe: m.societe.libelle }]),
+    ),
+    pieces: cr.pieces.map((p) => ({ numeroPiece: p.numeroPiece, rubrique: p.rubrique, nomFichier: p.nomFichier, taille: p.taille })),
     saisie,
     totaux: totaux(saisie),
   };

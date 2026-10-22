@@ -24,7 +24,9 @@ export type SaisieStock = {
   stockFinalReel: Montant;
 };
 export type SaisieVehicule = {
+  /** Société et agence (magasin) sont déduites du référentiel des véhicules. */
   codeSociete: string;
+  codeMagasin?: string;
   vendeurChauffeur: string;
   matricule: string;
   heureEntree: string;
@@ -161,9 +163,9 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
   if (!s.aucunVehicule && !s.vehicules.length) e.push("Véhicules : saisissez au moins un véhicule ou cochez « aucun véhicule traité ».");
   s.vehicules.forEach((v, i) => {
     const n = i + 1;
-    if (!v.codeSociete) e.push(`Véhicule ${n} : société manquante.`);
+    if (!rempli(v.matricule)) e.push(`Véhicule ${n} : choisissez le véhicule dans la liste.`);
+    else if (!v.codeSociete) e.push(`Véhicule ${n} : société manquante.`);
     if (!rempli(v.vendeurChauffeur)) e.push(`Véhicule ${n} : vendeur / chauffeur manquant.`);
-    if (!rempli(v.matricule)) e.push(`Véhicule ${n} : matricule manquant.`);
     if (!HEURE.test(v.heureEntree)) e.push(`Véhicule ${n} : heure d'entrée manquante.`);
     if (!HEURE.test(v.heureSortie)) e.push(`Véhicule ${n} : heure de sortie manquante.`);
     else if (HEURE.test(v.heureEntree) && v.heureSortie < v.heureEntree) e.push(`Véhicule ${n} : heure de sortie avant l'heure d'entrée.`);

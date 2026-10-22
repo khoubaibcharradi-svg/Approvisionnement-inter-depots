@@ -111,6 +111,7 @@ Le module numérise le formulaire papier « Compte rendu journalier dépôt ».
 
 - **Rôle `AGENT_DEPOT`** : l'agent est rattaché à **un dépôt**, choisi dans « Utilisateurs ». Il n'a accès qu'à « Compte rendu journalier », « Historique » et « Mon mot de passe ». Les demandes, le catalogue et l'administration lui sont refusés côté serveur, et chaque tentative est auditée.
 - **Magasins** (menu « Magasins », administrateur) : chaque magasin appartient à un dépôt et à une société (Promofood, Beesky, Proxim, COFILL…). Les magasins actifs d'un dépôt forment les lignes « situation du stock » de son compte rendu.
+- **Véhicules** (menu « Véhicules », administrateur) : chaque véhicule (clé : matricule) est rattaché à une agence, c'est-à-dire à un magasin, donc à un dépôt et à une société. Dans son compte rendu, l'agent choisit les véhicules traités dans la liste de son dépôt. La société, l'agence et le chauffeur habituel sont repris du référentiel, et le serveur refuse tout véhicule hors liste.
 - **Un compte rendu par dépôt et par jour** (`CR-000001`). L'agent peut saisir aujourd'hui et les `CR_JOURS_RETARD_MAX` jours précédents (3 par défaut). Il l'enregistre d'abord en **brouillon**, puis le **soumet**. Une fois soumis, le compte rendu n'est plus modifiable.
 - **Complétude contrôlée à la soumission**, côté serveur (`src/lib/compte-rendu/calculs.ts`). Tous les montants et toutes les rubriques doivent être renseignés (« RAS » accepté pour les textes). Une justification est obligatoire pour tout écart. Il faut au moins un véhicule, ou cocher « aucun véhicule ». L'état de stock système doit être annexé (`CR_PIECE_OBLIGATOIRE`).
 - **Calculs refaits par le serveur**, en millimes :
@@ -124,7 +125,7 @@ Le module numérise le formulaire papier « Compte rendu journalier dépôt ».
   - écarts en rouge ;
   - alerte sur les dépôts sans compte rendu soumis la veille ;
   - détail complet et téléchargement des annexes.
-- **Pièces jointes** : stockées dans `PIECES_DIR` (`./pieces-jointes`), avec leur empreinte SHA-256 en base. **Ce dossier doit être sauvegardé avec `backups/`** : la sauvegarde texte ne contient que la base.
+- **Pièces jointes par rubrique** : états de stock (obligatoire), caisse recettes (bordereaux…) et caisse dépenses (justificatifs). Le fichier est envoyé dès qu'il est choisi. Les fichiers sont stockés dans `PIECES_DIR` (`./pieces-jointes`), avec leur empreinte SHA-256 en base. **Ce dossier doit être sauvegardé avec `backups/`** : la sauvegarde texte ne contient que la base.
 
 ## Structure
 

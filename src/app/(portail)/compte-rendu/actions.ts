@@ -38,7 +38,8 @@ export async function ajouterPiece(form: FormData) {
     const numero = z.string().max(20).parse(form.get("numero"));
     const fichier = form.get("fichier");
     if (!(fichier instanceof File)) return { ok: false, message: "Choisissez un fichier." };
-    await service.ajouterPiece(u, numero, fichier);
+    const rubrique = z.enum(service.RUBRIQUES_PIECES).parse(form.get("rubrique"));
+    await service.ajouterPiece(u, numero, rubrique, fichier);
     return { ok: true, message: `Pièce « ${fichier.name} » ajoutée.` };
   });
 }

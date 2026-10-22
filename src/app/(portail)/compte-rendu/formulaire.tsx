@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { JourneeCompteRendu } from "@/lib/compte-rendu/service";
 import {
@@ -14,6 +14,8 @@ import {
   type SaisieCompteRendu,
 } from "@/lib/compte-rendu/calculs";
 import { ajouterPiece, enregistrerCompteRendu, retirerPiece } from "./actions";
+
+type Rubrique = "STOCK" | "RECETTES" | "DEPENSES";
 
 const fmt = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const classeEcart = (n: number) => (n === 0 ? "" : n < 0 ? "text-red-700 font-semibold" : "text-amber-700 font-semibold");
@@ -58,8 +60,8 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
   const [modifie, setModifie] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
   const [enCours, demarrer] = useTransition();
-  const fichier = useRef<HTMLInputElement>(null);
   const lecture = !j.modifiable;
+  const piecesStock = j.pieces.filter((p) => p.rubrique === "STOCK").length;
   const t = useMemo(() => totaux(s), [s]);
   const magasin = (code: string) => j.magasins.find((m) => m.code === code);
   const repriseMagasin = (code: string) => !!j.reprise?.magasins.includes(code);
@@ -93,7 +95,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
     );
 
   const soumettre = async () => {
-    const manques = controlerCompletude(s, { nbPieces: j.pieces.length, pieceObligatoire: j.pieceObligatoire });
+    const manques = controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire });
     if (manques.length) {
       setMessage({ ok: false, texte: `Compte rendu incomplet :\n• ${manques.join("\n• ")}` });
       return;
@@ -102,10 +104,8 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
     await sauver(true);
   };
 
-  const envoyerPiece = () =>
-    demarrer(async () => {
-      const f = fichier.current?.files?.[0];
-      if (!f) return;
+  /** Envoie la pièce dès qu'elle est choisie ; le brouillon est enregistré d'abord s'il n'existe pas. */
+  const envoyerPiece = async (rubrique: Rubrique, f: File) => {
       let numero = j.numero;
       if (!numero || modifie) {
         // La pièce est rattachée au compte rendu : le brouillon est enregistré d'abord.
@@ -116,12 +116,15 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
       }
       const form = new FormData();
       form.set("numero", numero);
+      form.set("rubrique", rubrique);
       form.set("fichier", f);
       const r = await ajouterPiece(form);
       setMessage({ ok: r.ok, texte: r.message });
-      if (fichier.current) fichier.current.value = "";
       router.refresh();
-    });
+  };
+  const pieces = (rubrique: Rubrique, titre: string, obligatoire: boolean) => (
+    <PiecesJointes j={j} rubrique={rubrique} titre={titre} obligatoire={obligatoire} lecture={lecture} envoyer={envoyerPiece} setMessage={setMessage} />
+  );
 
   return (
     <div className="flex flex-col gap-4 pb-24">
@@ -175,7 +178,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
           </table>
         </div>
         <p className="note">Stock final théorique = stock initial + réceptions − ventes + retours ; écart = stock réel − théorique.</p>
-        <PiecesJointes j={j} lecture={lecture} fichier={fichier} envoyer={envoyerPiece} enCours={enCours} setMessage={setMessage} />
+        {pieces("STOCK", "Annexe : états de stock système édités juste avant la clôture de la journée", j.pieceObligatoire)}
         <Texte label={`Justification des écarts${t.stock.ecart !== 0 || s.stocks.some((l) => calculerStock(l).ecart !== 0) ? " (obligatoire : écart constaté)" : ""}`}
           valeur={s.justificationEcarts} lecture={lecture} lignes={3} placeholder="Expliquez chaque écart (casse, erreur de saisie, inventaire…)" onChange={(v) => maj({ justificationEcarts: v })} />
       </Section>
@@ -187,25 +190,51 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
         {!s.aucunVehicule && (
           <div className="overflow-x-auto">
             <table className="tableau">
-              <thead><tr><th>Société</th><th>Vendeur / chauffeur</th><th>Matricule</th><th>Heure d&apos;entrée</th><th>Heure de sortie</th><th>Observations</th><th></th></tr></thead>
+              <thead><tr><th>Matricule</th><th>Agence / société</th><th>Vendeur / chauffeur</th><th>Heure d&apos;entrée</th><th>Heure de sortie</th><th>Observations</th><th></th></tr></thead>
               <tbody>
-                {s.vehicules.map((v, i) => (
+                {s.vehicules.map((v, i) => {
+                  const ref = j.vehicules.find((x) => x.matricule === v.matricule);
+                  return (
                   <tr key={i}>
-                    <td><ChoixSociete valeur={v.codeSociete} societes={j.societes} lecture={lecture} onChange={(x) => majLigne("vehicules", i, { codeSociete: x })} /></td>
+                    <td>
+                      <select className="champ w-44" value={v.matricule} disabled={lecture} aria-label="Matricule"
+                        onChange={(e) => {
+                          const x = j.vehicules.find((y) => y.matricule === e.target.value);
+                          majLigne("vehicules", i, {
+                            matricule: e.target.value,
+                            codeSociete: x?.codeSociete ?? "",
+                            codeMagasin: x?.codeMagasin ?? "",
+                            vendeurChauffeur: v.vendeurChauffeur || x?.chauffeurHabituel || "",
+                          });
+                        }}>
+                        <option value="">Choisir…</option>
+                        {v.matricule && !ref && <option value={v.matricule}>{v.matricule} (hors liste)</option>}
+                        {j.vehicules.map((x) => (
+                          <option key={x.matricule} value={x.matricule} disabled={s.vehicules.some((y, k) => k !== i && y.matricule === x.matricule)}>
+                            {x.matricule}{x.description ? ` · ${x.description}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="text-sm">{ref ? <><b>{ref.societe}</b><div className="note text-xs">{ref.magasin}</div></> : <span className="note">—</span>}</td>
                     <td><input className="champ w-40" value={v.vendeurChauffeur} disabled={lecture} maxLength={100} aria-label="Vendeur / chauffeur" onChange={(e) => majLigne("vehicules", i, { vendeurChauffeur: e.target.value })} /></td>
-                    <td><input className="champ w-32 uppercase" value={v.matricule} disabled={lecture} maxLength={30} placeholder="123 TU 4567" aria-label="Matricule" onChange={(e) => majLigne("vehicules", i, { matricule: e.target.value })} /></td>
                     <td><input type="time" className="champ" value={v.heureEntree} disabled={lecture} aria-label="Heure d'entrée" onChange={(e) => majLigne("vehicules", i, { heureEntree: e.target.value })} /></td>
                     <td><input type="time" className="champ" value={v.heureSortie} disabled={lecture} aria-label="Heure de sortie" onChange={(e) => majLigne("vehicules", i, { heureSortie: e.target.value })} /></td>
                     <td><input className="champ w-48" value={v.observations} disabled={lecture} maxLength={500} aria-label="Observations véhicule" onChange={(e) => majLigne("vehicules", i, { observations: e.target.value })} /></td>
                     <td>{!lecture && <button type="button" className="btn-secondaire" onClick={() => retirer("vehicules", i)}>Retirer</button>}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-        {!lecture && !s.aucunVehicule && (
-          <div><button type="button" className="btn-secondaire" onClick={() => maj({ vehicules: [...s.vehicules, { codeSociete: "", vendeurChauffeur: "", matricule: "", heureEntree: "", heureSortie: "", observations: "" }] })}>Ajouter un véhicule</button></div>
+        {!lecture && !s.aucunVehicule && !j.vehicules.length && (
+          <p className="alerte-erreur">Aucun véhicule n&apos;est paramétré pour votre dépôt : contactez l&apos;administrateur (menu « Véhicules »).</p>
+        )}
+        {!lecture && !s.aucunVehicule && j.vehicules.length > 0 && (
+          <div><button type="button" className="btn-secondaire" disabled={s.vehicules.length >= j.vehicules.length}
+            onClick={() => maj({ vehicules: [...s.vehicules, { codeSociete: "", codeMagasin: "", vendeurChauffeur: "", matricule: "", heureEntree: "", heureSortie: "", observations: "" }] })}>Ajouter un véhicule</button></div>
         )}
       </Section>
 
@@ -244,6 +273,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
         {!lecture && (
           <div><button type="button" className="btn-secondaire" onClick={() => maj({ recettes: [...s.recettes, { agent: "", codeSociete: "", caComptant: null, recouvrement: null, caCredit: null, recette: null }] })}>Ajouter une ligne</button></div>
         )}
+        {pieces("RECETTES", "Pièces jointes : bordereaux de versement, états de caisse…", false)}
         <Texte label="Observations" valeur={s.observationsRecettes} lecture={lecture} onChange={(v) => maj({ observationsRecettes: v })} />
       </Section>
 
@@ -313,6 +343,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
         {!lecture && (
           <div><button type="button" className="btn-secondaire" onClick={() => maj({ depenses: [...s.depenses, { libelle: "", debit: null, credit: null, validePar: "" }] })}>Ajouter une opération</button></div>
         )}
+        {pieces("DEPENSES", "Pièces jointes : justificatifs de dépenses (factures, tickets…)", false)}
         <Texte label="Observations" valeur={s.observationsDepenses} lecture={lecture} onChange={(v) => maj({ observationsDepenses: v })} />
       </Section>
 
@@ -346,28 +377,28 @@ function ChoixSociete({ valeur, societes, lecture, onChange }: { valeur: string;
   );
 }
 
-function PiecesJointes({ j, lecture, fichier, envoyer, enCours, setMessage }: {
+function PiecesJointes({ j, rubrique, titre, obligatoire, lecture, envoyer, setMessage }: {
   j: JourneeCompteRendu;
+  rubrique: Rubrique;
+  titre: string;
+  obligatoire: boolean;
   lecture: boolean;
-  fichier: React.RefObject<HTMLInputElement | null>;
-  envoyer: () => void;
-  enCours: boolean;
+  envoyer: (rubrique: Rubrique, f: File) => Promise<void>;
   setMessage: (m: { ok: boolean; texte: string }) => void;
 }) {
   const router = useRouter();
-  const [retrait, demarrer] = useTransition();
+  const [enCours, demarrer] = useTransition();
+  const liste = j.pieces.filter((p) => p.rubrique === rubrique);
   return (
     <div className="rounded-md border border-dashed border-slate-300 p-3">
-      <p className="text-sm font-medium">
-        Annexe : états de stock système édités juste avant la clôture de la journée{j.pieceObligatoire ? " (obligatoire)" : ""}
-      </p>
+      <p className="text-sm font-medium">{titre}{obligatoire ? " (obligatoire)" : ""}</p>
       <ul className="my-2 flex flex-col gap-1 text-sm">
-        {j.pieces.map((p) => (
+        {liste.map((p) => (
           <li key={p.numeroPiece} className="flex items-center gap-2">
             <a className="text-marque underline" href={`/api/comptes-rendus/${j.numero}/pieces/${p.numeroPiece}`}>{p.nomFichier}</a>
             <span className="note">({Math.ceil(p.taille / 1024)} Ko)</span>
             {!lecture && (
-              <button type="button" className="text-xs text-red-700 underline" disabled={retrait} onClick={() =>
+              <button type="button" className="text-xs text-red-700 underline" disabled={enCours} onClick={() =>
                 demarrer(async () => {
                   const r = await retirerPiece(j.numero!, p.numeroPiece);
                   setMessage({ ok: r.ok, texte: r.message });
@@ -376,15 +407,20 @@ function PiecesJointes({ j, lecture, fichier, envoyer, enCours, setMessage }: {
             )}
           </li>
         ))}
-        {!j.pieces.length && <li className="note">Aucune pièce jointe.</li>}
+        {!liste.length && <li className="note">Aucune pièce jointe.</li>}
       </ul>
       {!lecture && (
-        <div className="flex flex-wrap items-center gap-2">
-          <input ref={fichier} type="file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" className="text-sm" aria-label="Pièce jointe" />
-          <button type="button" className="btn-secondaire" disabled={enCours} onClick={envoyer}>Joindre</button>
-          <span className="note">PDF, Excel, CSV, JPG ou PNG · 8 Mo maximum</span>
-        </div>
+        <label className={`btn-secondaire cursor-pointer ${enCours ? "pointer-events-none opacity-50" : ""}`}>
+          {enCours ? "Envoi en cours…" : "Joindre un fichier"}
+          <input type="file" className="sr-only" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png" aria-label={`Pièce jointe ${rubrique}`} disabled={enCours}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) demarrer(() => envoyer(rubrique, f));
+            }} />
+        </label>
       )}
+      {!lecture && <span className="note ml-2">PDF, Excel, CSV, JPG ou PNG · 8 Mo maximum · envoi dès la sélection</span>}
     </div>
   );
 }

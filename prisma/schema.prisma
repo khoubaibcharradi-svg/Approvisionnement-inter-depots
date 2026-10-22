@@ -63,6 +63,13 @@ enum StatutCompteRendu {
   SOUMIS
 }
 
+/// Section du compte rendu à laquelle une pièce jointe est annexée.
+enum RubriquePiece {
+  STOCK
+  RECETTES
+  DEPENSES
+}
+
 enum NatureCaisse {
   ESPECES
   CHEQUES
@@ -127,6 +134,7 @@ model Depot {
   agents        Utilisateur[] @relation("AgentDepot")
   magasins      Magasin[]
   comptesRendus CompteRendu[]
+  vehicules     Vehicule[]
 
   @@map("depot")
 }
@@ -385,13 +393,39 @@ model Magasin {
   dateSuppression  DateTime?
   supprimePar      String?   @db.VarChar(50)
 
-  depot   Depot              @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  societe Societe            @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  stocks  CompteRenduStock[]
+  depot     Depot              @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  societe   Societe            @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  stocks    CompteRenduStock[]
+  vehicules Vehicule[]
 
   @@index([codeDepot])
   @@index([codeSociete])
   @@map("magasin")
+}
+
+/// Véhicule de la flotte, rattaché à une agence (magasin), donc à un dépôt et à une société.
+model Vehicule {
+  matricule         String    @id @db.VarChar(30)
+  codeMagasin       String    @db.VarChar(30)
+  /// Dépôt du magasin, dénormalisé pour filtrer la liste d'un dépôt.
+  codeDepot         String    @db.VarChar(30)
+  chauffeurHabituel String?   @db.VarChar(100)
+  description       String?   @db.VarChar(100)
+  isActif           Boolean   @default(true)
+  isDeleted         Boolean   @default(false)
+  dateCreation      DateTime  @default(now())
+  creePar           String?   @db.VarChar(50)
+  dateModification  DateTime  @updatedAt
+  modifiePar        String?   @db.VarChar(50)
+  dateSuppression   DateTime?
+  supprimePar       String?   @db.VarChar(50)
+
+  magasin Magasin @relation(fields: [codeMagasin], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  depot   Depot   @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
+
+  @@index([codeDepot])
+  @@index([codeMagasin])
+  @@map("vehicule")
 }
 
 /// Compte rendu journalier d'un dépôt (ENR-08) : un seul par dépôt et par jour.
@@ -472,6 +506,8 @@ model CompteRenduVehicule {
   numeroCompteRendu String    @db.VarChar(20)
   numeroLigne       Int
   codeSociete       String    @db.VarChar(30)
+  /// Agence (magasin) du véhicule au moment du compte rendu.
+  codeMagasin       String?   @db.VarChar(30)
   vendeurChauffeur  String    @db.VarChar(100)
   matricule         String    @db.VarChar(30)
   heureEntree       String    @db.VarChar(5)
@@ -571,21 +607,22 @@ model CompteRenduDepense {
 
 /// Pièces annexées (états de stock système édités avant la clôture). Fichiers stockés sur disque.
 model CompteRenduPiece {
-  numeroCompteRendu String    @db.VarChar(20)
+  numeroCompteRendu String        @db.VarChar(20)
   numeroPiece       Int
-  nomFichier        String    @db.VarChar(255)
-  typeMime          String    @db.VarChar(100)
+  rubrique          RubriquePiece @default(STOCK)
+  nomFichier        String        @db.VarChar(255)
+  typeMime          String        @db.VarChar(100)
   taille            Int
-  fichierStocke     String    @db.VarChar(255)
-  sha256            String    @db.Char(64)
-  isActif           Boolean   @default(true)
-  isDeleted         Boolean   @default(false)
-  dateCreation      DateTime  @default(now())
-  creePar           String?   @db.VarChar(50)
-  dateModification  DateTime  @updatedAt
-  modifiePar        String?   @db.VarChar(50)
+  fichierStocke     String        @db.VarChar(255)
+  sha256            String        @db.Char(64)
+  isActif           Boolean       @default(true)
+  isDeleted         Boolean       @default(false)
+  dateCreation      DateTime      @default(now())
+  creePar           String?       @db.VarChar(50)
+  dateModification  DateTime      @updatedAt
+  modifiePar        String?       @db.VarChar(50)
   dateSuppression   DateTime?
-  supprimePar       String?   @db.VarChar(50)
+  supprimePar       String?       @db.VarChar(50)
 
   compteRendu CompteRendu @relation(fields: [numeroCompteRendu], references: [numero], onUpdate: Cascade, onDelete: Restrict)
 
