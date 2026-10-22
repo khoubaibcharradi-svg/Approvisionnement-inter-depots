@@ -15,7 +15,7 @@ Durée : environ 1 heure. Toutes les commandes se tapent dans un terminal SSH su
 ## 1. Commander et préparer le serveur
 
 1. Dans l'espace client OVH, commande un **VPS** sous **Ubuntu 24.04**. Tu reçois par e-mail l'adresse IP et l'accès `ubuntu`.
-2. Dans ta zone DNS (domaine OVH ou autre), crée un enregistrement **A** de `appro.ton-domaine.tn` vers l'IP du VPS.
+2. Dans ta zone DNS (domaine OVH ou autre), crée un enregistrement **A** de `appro.promofood.cloud` vers l'IP du VPS.
 3. Connecte-toi depuis ton PC Windows (PowerShell) :
    ```powershell
    ssh ubuntu@IP_DU_VPS
@@ -120,13 +120,12 @@ echo 'appro ALL=(root) NOPASSWD: /usr/bin/systemctl restart appro, /usr/bin/syst
 ```bash
 sudo cp /opt/appro/deploy/appro-proxy.conf /etc/nginx/snippets/appro-proxy.conf
 sudo cp /opt/appro/deploy/nginx-appro.conf /etc/nginx/sites-available/appro
-sudo sed -i 's/appro.exemple.tn/appro.ton-domaine.tn/' /etc/nginx/sites-available/appro
 sudo ln -s /etc/nginx/sites-available/appro /etc/nginx/sites-enabled/appro
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d appro.ton-domaine.tn --redirect -m ton.email@domaine.tn --agree-tos -n
+sudo certbot --nginx -d appro.promofood.cloud --redirect -m ton.email@domaine.tn --agree-tos -n
 ```
-Le certificat se renouvelle tout seul. Le portail est alors accessible sur **https://appro.ton-domaine.tn**.
+Le certificat se renouvelle tout seul. Le portail est alors accessible sur **https://appro.promofood.cloud**.
 
 Nginx limite en plus les tentatives sur `/connexion` (10 par minute et par IP), en complément du verrouillage applicatif.
 
@@ -169,9 +168,9 @@ L'environnement de recette est une deuxième installation, séparée de la produ
 | Dossier | `/opt/appro` | `/opt/appro-test` |
 | Base MySQL | `appro` | `appro_test` (le nom doit contenir « test ») |
 | Service / port | `appro` / 3000 | `appro-test` / 3001 |
-| Adresse | `appro.ton-domaine.tn` | `test.appro.ton-domaine.tn` (protégée par mot de passe Nginx) |
+| Adresse | `appro.promofood.cloud` | `test.appro.promofood.cloud` (protégée par mot de passe Nginx) |
 
-1. **DNS** : un enregistrement A `test.appro.ton-domaine.tn` vers l'IP du VPS.
+1. **DNS** : un enregistrement A `test.appro.promofood.cloud` vers l'IP du VPS.
 2. **Base** (`sudo mysql`) :
    ```sql
    CREATE DATABASE appro_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -204,10 +203,9 @@ L'environnement de recette est une deuxième installation, séparée de la produ
    sudo cp deploy/appro-test.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now appro-test
    sudo apt -y install apache2-utils && sudo htpasswd -c /etc/nginx/appro-test.htpasswd recette
    sudo cp deploy/nginx-appro-test.conf /etc/nginx/sites-available/appro-test
-   sudo sed -i 's/test.appro.exemple.tn/test.appro.ton-domaine.tn/' /etc/nginx/sites-available/appro-test
    sudo ln -s /etc/nginx/sites-available/appro-test /etc/nginx/sites-enabled/appro-test
    sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d test.appro.ton-domaine.tn --redirect -n
+   sudo certbot --nginx -d test.appro.promofood.cloud --redirect -n
    ```
 6. **Mises à jour de la recette** : `sudo -u appro bash /opt/appro-test/deploy/mettre-a-jour.sh test`
 
