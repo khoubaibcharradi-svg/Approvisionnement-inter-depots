@@ -346,8 +346,14 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
         if (x.codeSociete && !societes.has(x.codeSociete)) throw new ErreurCompteRendu(`Société inconnue : ${x.codeSociete}`);
       }
       // Véhicules : uniquement ceux du référentiel du dépôt ; société et agence viennent du référentiel.
+      // Un véhicule désactivé depuis reste accepté s'il figurait déjà dans ce compte rendu.
+      const dejaSaisis = new Set(
+        (await tx.compteRenduVehicule.findMany({ where: { compteRendu: { codeDepot, dateJournee: enDate(dateJournee) } }, select: { matricule: true } })).map((v) => v.matricule),
+      );
       const flotte = new Map(
-        (await tx.vehicule.findMany({ where: { codeDepot, isActif: true }, include: { magasin: true } })).map((v) => [v.matricule, v]),
+        (await tx.vehicule.findMany({ where: { codeDepot }, include: { magasin: true } }))
+          .filter((v) => v.isActif || dejaSaisis.has(v.matricule))
+          .map((v) => [v.matricule, v]),
       );
       for (const v of saisie.vehicules) {
         if (!v.matricule) continue;
@@ -356,6 +362,16 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
         v.matricule = ref.matricule;
         v.codeMagasin = ref.codeMagasin;
         v.codeSociete = ref.magasin.codeSociete;
+      }
+      // Caisse recettes : l'agent est un chauffeur, celui d'un véhicule du dépôt ou d'un véhicule traité ce jour.
+      const cleChauffeur = (c: string) => c.trim().toLowerCase().replace(/\s+/g, " ");
+      const chauffeurs = new Set(
+        [...[...flotte.values()].map((v) => v.chauffeurHabituel ?? ""), ...saisie.vehicules.map((v) => v.vendeurChauffeur)].filter(Boolean).map(cleChauffeur),
+      );
+      for (const r of saisie.recettes) {
+        if (r.agent && !chauffeurs.has(cleChauffeur(r.agent))) {
+          throw new ErreurCompteRendu(`Caisse recettes : « ${r.agent} » n'est pas un chauffeur du dépôt ; choisissez-le dans la liste.`);
+        }
       }
 
       // Continuité : stock initial et soldes veille repris du dernier compte rendu soumis.

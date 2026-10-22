@@ -174,7 +174,7 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
   if (!s.recettes.length) e.push("Caisse recettes : saisissez au moins une ligne.");
   s.recettes.forEach((r, i) => {
     const n = i + 1;
-    if (!rempli(r.agent)) e.push(`Recette ${n} : agent manquant.`);
+    if (!rempli(r.agent)) e.push(`Recette ${n} : choisissez l'agent (chauffeur).`);
     if (!r.codeSociete) e.push(`Recette ${n} : société manquante.`);
     const manquants = (
       [

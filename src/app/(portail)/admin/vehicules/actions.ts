@@ -26,6 +26,7 @@ async function executer(f: () => Promise<Resultat>): Promise<Resultat> {
   try {
     const r = await f();
     revalidatePath("/admin/vehicules");
+    revalidatePath("/compte-rendu/vehicules");
     return r;
   } catch (e) {
     if (e instanceof z.ZodError) return { ok: false, message: e.issues[0]?.message ?? "Saisie invalide" };
@@ -33,13 +34,29 @@ async function executer(f: () => Promise<Resultat>): Promise<Resultat> {
   }
 }
 
+/**
+ * L'administrateur gère tous les véhicules ; un agent dépôt gère ceux des agences de son dépôt
+ * (ajout, description, chauffeur, activation), sans pouvoir les supprimer.
+ */
+async function gestionnaire() {
+  return exigerUtilisateur([ROLES.ADMINISTRATEUR, ROLES.AGENT_DEPOT]);
+}
+
+async function horsPerimetre(u: Awaited<ReturnType<typeof gestionnaire>>, codeDepot: string | undefined, cle: string) {
+  if (u.role !== ROLES.AGENT_DEPOT || (codeDepot && codeDepot === u.codeDepotAgent)) return false;
+  await auditer({ action: "VEHICULE_REFUSE", login: u.login, codeRole: u.role, entite: "Vehicule", cleEntite: cle, detail: "hors du dépôt de l'agent", succes: false });
+  return true;
+}
+
 export async function enregistrerVehicule(saisie: unknown, creation: boolean): Promise<Resultat> {
-  const u = await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+  const u = await gestionnaire();
   return executer(async () => {
     const v = schema.parse(saisie);
     const magasin = await prisma.magasin.findUnique({ where: { code: v.codeMagasin } });
-    if (!magasin) throw new Error("Agence (magasin) inconnue.");
+    if (!magasin || !magasin.isActif) throw new Error("Agence (magasin) inconnue ou inactive.");
+    if (await horsPerimetre(u, magasin.codeDepot, v.matricule)) throw new Error("Agence hors de votre dépôt.");
     const avant = await prisma.vehicule.findUnique({ where: { matricule: v.matricule } });
+    if (avant && (await horsPerimetre(u, avant.codeDepot, v.matricule))) throw new Error(creation ? `Le véhicule ${v.matricule} existe déjà dans un autre dépôt.` : "Véhicule hors de votre dépôt.");
     if (creation && avant) throw new Error(`Le véhicule ${v.matricule} existe déjà.`);
     const champs = {
       codeMagasin: magasin.code,
@@ -67,9 +84,10 @@ export async function enregistrerVehicule(saisie: unknown, creation: boolean): P
 }
 
 export async function basculerVehicule(m: string): Promise<Resultat> {
-  const u = await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+  const u = await gestionnaire();
   return executer(async () => {
     const v = await prisma.vehicule.findUniqueOrThrow({ where: { matricule: m } });
+    if (await horsPerimetre(u, v.codeDepot, v.matricule)) throw new Error("Véhicule hors de votre dépôt.");
     await prisma.vehicule.update({ where: { matricule: v.matricule }, data: { isActif: !v.isActif, modifiePar: u.login } });
     await auditer({ action: v.isActif ? "VEHICULE_DESACTIVE" : "VEHICULE_ACTIVE", login: u.login, codeRole: u.role, entite: "Vehicule", cleEntite: v.matricule });
     return { ok: true, message: v.isActif ? "Véhicule désactivé : il n'est plus proposé aux agents." : "Véhicule réactivé." };

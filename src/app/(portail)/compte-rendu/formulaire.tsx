@@ -65,6 +65,12 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
   const t = useMemo(() => totaux(s), [s]);
   const magasin = (code: string) => j.magasins.find((m) => m.code === code);
   const repriseMagasin = (code: string) => !!j.reprise?.magasins.includes(code);
+  /** Chauffeurs proposés dans la caisse recettes : ceux des véhicules du dépôt et ceux des véhicules traités ce jour. */
+  const chauffeurs = [...new Set([...j.vehicules.map((v) => v.chauffeurHabituel), ...s.vehicules.map((v) => v.vendeurChauffeur)].map((c) => c.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "fr"),
+  );
+  const societeDuChauffeur = (c: string) =>
+    s.vehicules.find((v) => v.vendeurChauffeur.trim() === c)?.codeSociete || j.vehicules.find((v) => v.chauffeurHabituel.trim() === c)?.codeSociete || "";
   /** Ligne calculée depuis l'inventaire en quantités : non saisissable ici. */
   const parInventaire = (code: string) => j.inventaire.obligatoire || !!j.inventaire.etat[code];
   const lienInventaire = (code: string) => `/compte-rendu/inventaire?date=${j.dateJournee}&magasin=${encodeURIComponent(code)}`;
@@ -236,7 +242,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
                           });
                         }}>
                         <option value="">Choisir…</option>
-                        {v.matricule && !ref && <option value={v.matricule}>{v.matricule} (hors liste)</option>}
+                        {v.matricule && !ref && <option value={v.matricule}>{v.matricule} (inactif)</option>}
                         {j.vehicules.map((x) => (
                           <option key={x.matricule} value={x.matricule} disabled={s.vehicules.some((y, k) => k !== i && y.matricule === x.matricule)}>
                             {x.matricule}{x.description ? ` · ${x.description}` : ""}
@@ -269,13 +275,20 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
       <Section titre="Suivi de la caisse recettes et versements">
         <div className="overflow-x-auto">
           <table className="tableau">
-            <thead><tr><th>Agent</th><th>Société</th><th>CA au comptant</th><th>Recouvrement</th><th>CA à crédit</th><th>Recette</th><th>Écart</th><th></th></tr></thead>
+            <thead><tr><th>Agent (chauffeur)</th><th>Société</th><th>CA au comptant</th><th>Recouvrement</th><th>CA à crédit</th><th>Recette</th><th>Écart</th><th></th></tr></thead>
             <tbody>
               {s.recettes.map((r, i) => {
                 const ecart = calculerRecette(r).ecart;
                 return (
                   <tr key={i}>
-                    <td><input className="champ w-36" value={r.agent} disabled={lecture} maxLength={100} aria-label="Agent" onChange={(e) => majLigne("recettes", i, { agent: e.target.value })} /></td>
+                    <td>
+                      <select className="champ w-44" value={r.agent} disabled={lecture} aria-label="Agent"
+                        onChange={(e) => majLigne("recettes", i, { agent: e.target.value, codeSociete: r.codeSociete || societeDuChauffeur(e.target.value) })}>
+                        <option value="">Choisir…</option>
+                        {r.agent && !chauffeurs.includes(r.agent) && <option value={r.agent}>{r.agent} (hors liste)</option>}
+                        {chauffeurs.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
                     <td><ChoixSociete valeur={r.codeSociete} societes={j.societes} lecture={lecture} onChange={(x) => majLigne("recettes", i, { codeSociete: x })} /></td>
                     <td><Montant label="CA au comptant" valeur={r.caComptant} verrouille={lecture} onChange={(v) => majLigne("recettes", i, { caComptant: v })} /></td>
                     <td><Montant label="Recouvrement" valeur={r.recouvrement} verrouille={lecture} onChange={(v) => majLigne("recettes", i, { recouvrement: v })} /></td>

@@ -9,6 +9,7 @@ const MENU: { href: string; libelle: string; roles?: CodeRole[]; saufRoles?: Cod
   { href: "/catalogue", libelle: "Catalogue SKU", saufRoles: [ROLES.SUPERVISEUR, ROLES.AGENT_DEPOT] },
   { href: "/compte-rendu", libelle: "Compte rendu journalier", roles: [ROLES.AGENT_DEPOT] },
   { href: "/compte-rendu/inventaire", libelle: "Inventaire", roles: [ROLES.AGENT_DEPOT] },
+  { href: "/compte-rendu/vehicules", libelle: "Véhicules", roles: [ROLES.AGENT_DEPOT] },
   { href: "/compte-rendu/historique", libelle: "Historique", roles: [ROLES.AGENT_DEPOT] },
   { href: "/audit", libelle: "Journal d'audit", saufRoles: [ROLES.SUPERVISEUR, ROLES.CHEF_VENTE, ROLES.AGENT_DEPOT] },
   { href: "/statistiques", libelle: "Statistiques", roles: [ROLES.ADMINISTRATEUR] },

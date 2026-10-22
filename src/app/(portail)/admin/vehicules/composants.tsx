@@ -20,7 +20,7 @@ function ChoixAgence({ valeur, agences, depots, onChange }: { valeur: string; ag
   );
 }
 
-function Ligne({ v, agences, depots }: { v: Vehicule; agences: Agence[]; depots: Depot[] }) {
+function Ligne({ v, agences, depots, peutSupprimer }: { v: Vehicule; agences: Agence[]; depots: Depot[]; peutSupprimer: boolean }) {
   const [x, setX] = useState(v);
   const [r, setR] = useState<act.Resultat | null>(null);
   const [enCours, demarrer] = useTransition();
@@ -35,14 +35,14 @@ function Ligne({ v, agences, depots }: { v: Vehicule; agences: Agence[]; depots:
       <td className="whitespace-nowrap">
         <button className="btn-secondaire" disabled={enCours} onClick={() => lancer(() => act.enregistrerVehicule(x, false))}>Enregistrer</button>{" "}
         <button className="btn-secondaire" disabled={enCours} onClick={() => lancer(() => act.basculerVehicule(v.matricule))}>{v.isActif ? "Désactiver" : "Activer"}</button>{" "}
-        <button className="btn-danger" disabled={enCours} onClick={() => confirm(`Supprimer le véhicule ${v.matricule} ?`) && lancer(() => act.supprimerVehicule(v.matricule))}>Supprimer</button>
+        {peutSupprimer && <button className="btn-danger" disabled={enCours} onClick={() => confirm(`Supprimer le véhicule ${v.matricule} ?`) && lancer(() => act.supprimerVehicule(v.matricule))}>Supprimer</button>}
         {r && <div className={`mt-1 text-xs ${r.ok ? "text-emerald-700" : "text-red-700"}`}>{r.message}</div>}
       </td>
     </tr>
   );
 }
 
-export function GestionVehicules({ depots, agences, vehicules }: { depots: Depot[]; agences: Agence[]; vehicules: Vehicule[] }) {
+export function GestionVehicules({ depots, agences, vehicules, peutSupprimer = true }: { depots: Depot[]; agences: Agence[]; vehicules: Vehicule[]; peutSupprimer?: boolean }) {
   const vide = { matricule: "", codeMagasin: "", chauffeurHabituel: "", description: "" };
   const [nouveau, setNouveau] = useState(vide);
   const [filtre, setFiltre] = useState("");
@@ -67,9 +67,9 @@ export function GestionVehicules({ depots, agences, vehicules }: { depots: Depot
         {r && <p className={r.ok ? "alerte-ok" : "alerte-erreur"}>{r.message}</p>}
       </div>
 
-      <label className="etiquette w-60">Afficher le dépôt
+      {depots.length > 1 && <label className="etiquette w-60">Afficher le dépôt
         <select className="champ" value={filtre} onChange={(e) => setFiltre(e.target.value)}><option value="">Tous</option>{depots.map((d) => <option key={d.code} value={d.code}>{d.libelle}</option>)}</select>
-      </label>
+      </label>}
 
       {depots.filter((d) => !filtre || d.code === filtre).map((d) => {
         const liste = vehicules.filter((v) => v.codeDepot === d.code);
@@ -79,7 +79,7 @@ export function GestionVehicules({ depots, agences, vehicules }: { depots: Depot
             <table className="tableau">
               <thead><tr><th>Matricule</th><th>Agence</th><th>Société</th><th>Chauffeur habituel</th><th>Description</th><th></th></tr></thead>
               <tbody>
-                {liste.map((v) => <Ligne key={`${v.matricule}-${v.codeMagasin}-${v.isActif}-${v.chauffeurHabituel}-${v.description}`} v={v} agences={agences} depots={depots} />)}
+                {liste.map((v) => <Ligne key={v.matricule} v={v} agences={agences} depots={depots} peutSupprimer={peutSupprimer} />)}
                 {!liste.length && <tr><td colSpan={6} className="note py-3 text-center">Aucun véhicule.</td></tr>}
               </tbody>
             </table>
