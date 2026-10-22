@@ -41,7 +41,6 @@ export default function PageConnexion() {
         {LOGOS.map((l) => (
           <img key={l.nom} src={l.image.src} alt={l.nom} width={l.image.width} height={l.image.height} className={`${l.hauteur} w-auto`} />
         ))}
-        <p className="text-[11px] text-slate-500">Fond de carte : geoBoundaries (CC BY 4.0)</p>
       </footer>
     </div>
   );
