@@ -55,7 +55,7 @@ EXIT;
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/appro --shell /bin/bash appro
-sudo -u appro git clone https://github.com/khoubaibcharradi-svg/Approvisionnement-inter-depots.git /opt/appro
+sudo -u appro git clone --branch prod https://github.com/khoubaibcharradi-svg/Approvisionnement-inter-depots.git /opt/appro
 cd /opt/appro
 sudo -u appro npm ci --no-audit --no-fund
 ```
@@ -144,10 +144,11 @@ Restauration : `cd /opt/appro && sudo -u appro npm run db:restore -- <fichier>.s
 
 ## 7. Mettre à jour le portail
 
-Après chaque nouvelle version poussée sur GitHub :
+Après chaque mise en production (fusion dans la branche `prod`, voir `docs/BRANCHES.md`) :
 ```bash
-sudo -u appro bash /opt/appro/deploy/mettre-a-jour.sh
+sudo -u appro bash /opt/appro/deploy/mettre-a-jour.sh prod
 ```
+Sur un serveur de recette, cloner avec `--branch test` et lancer le script avec `test`.
 Le script enchaîne : sauvegarde de la base, récupération du code, dépendances, migrations, build, redémarrage, puis vérification.
 
 ## 8. Premiers pas après la mise en ligne

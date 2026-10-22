@@ -19,7 +19,7 @@ npm run dev                   # http://localhost:3000
 
 Le fichier de paramétrage (`prisma/data/parametrage.xlsx` par défaut, ou `SEED_FICHIER`) contient des données internes : il n'est pas versionné et doit être déposé à la main sur le serveur. Feuilles attendues : Produits, Ventes, Stock, Famille, Responsables, Dépôts.
 
-Production : `npm run build` puis `npm start`. Mise en ligne sur un serveur (OVH) : voir `docs/DEPLOIEMENT-OVH.md`.
+Production : `npm run build` puis `npm start`. Mise en ligne sur un serveur (OVH) : voir `docs/DEPLOIEMENT-OVH.md`. Branches `dev` → `test` → `prod` : voir `docs/BRANCHES.md`.
 
 Commandes utiles :
 
