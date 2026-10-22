@@ -6,7 +6,7 @@ const ZONES = [
   { trace: TRACES.CAP_BON, nom: "Cap Bon", point: [234, 74], ligne: [300, 74], texte: [306, 80], ancre: "start" },
   { trace: TRACES.SOUSSE, nom: "Sousse", point: [212, 145], ligne: [300, 145], texte: [306, 151], ancre: "start" },
   { trace: TRACES.SFAX, nom: "Sfax", point: [212, 240], ligne: [300, 240], texte: [306, 246], ancre: "start" },
-  { trace: TRACES.NORD_OUEST, nom: "Nord-Ouest", point: [88, 125], ligne: [-6, 125], texte: [-12, 131], ancre: "end" },
+  { trace: TRACES.JENDOUBA, nom: "Jendouba", point: [84, 82], ligne: [-6, 82], texte: [-12, 88], ancre: "end" },
 ] as const;
 
 export function CarteTunisie() {
@@ -15,7 +15,7 @@ export function CarteTunisie() {
       role="img"
       aria-label={`Carte de la Tunisie : zones ${ZONES.map((z) => z.nom).join(", ")}`}
       viewBox="-115 0 510 631"
-      className="block h-auto w-full"
+      className="mx-auto block h-auto w-full lg:h-full lg:w-auto lg:max-w-full"
     >
       <g stroke="#ffffff" strokeWidth="1" strokeLinejoin="round">
         <path fill="#cbd5e1" d={TRACES.AUTRES} />
