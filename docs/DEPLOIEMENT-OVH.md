@@ -54,7 +54,8 @@ EXIT;
 ## 3. Installer le portail
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/appro --shell /bin/bash appro
+sudo useradd --system --no-create-home --home-dir /opt/appro --shell /bin/bash appro
+sudo mkdir /opt/appro && sudo chown appro:appro /opt/appro
 sudo -u appro git clone --branch prod https://github.com/khoubaibcharradi-svg/Approvisionnement-inter-depots.git /opt/appro
 cd /opt/appro
 sudo -u appro npm ci --no-audit --no-fund
