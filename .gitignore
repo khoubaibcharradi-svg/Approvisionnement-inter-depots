@@ -19,3 +19,6 @@ backups/*
 # Données internes (noms, stocks, ventes) : jamais dans le dépôt
 prisma/data/
 docs/*.docx
+
+# Pièces jointes des comptes rendus (stockées sur le serveur, à sauvegarder avec backups/)
+pieces-jointes/

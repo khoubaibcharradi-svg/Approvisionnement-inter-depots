@@ -7,6 +7,7 @@ export const ROLES = {
   DIRECTEUR_LOGISTIQUE: "DIRECTEUR_LOGISTIQUE",
   CHEF_DEPOT: "CHEF_DEPOT",
   ADMINISTRATEUR: "ADMINISTRATEUR",
+  AGENT_DEPOT: "AGENT_DEPOT",
 } as const;
 
 export type CodeRole = (typeof ROLES)[keyof typeof ROLES];
@@ -18,7 +19,18 @@ export const LIBELLES_ROLES: Record<CodeRole, string> = {
   DIRECTEUR_LOGISTIQUE: "Directeur logistique",
   CHEF_DEPOT: "Chef dépôt Radès",
   ADMINISTRATEUR: "Administrateur (DGA)",
+  AGENT_DEPOT: "Agent dépôt",
 };
+
+/** Page d'accueil selon le rôle : l'agent dépôt n'a accès qu'au compte rendu journalier. */
+export const accueilDuRole = (role: CodeRole) => (role === ROLES.AGENT_DEPOT ? "/compte-rendu" : "/demandes");
+
+export const SOCIETES_DEFAUT = [
+  { code: "PROMOFOOD", libelle: "Promofood" },
+  { code: "BEESKY", libelle: "Beesky" },
+  { code: "PROXIM", libelle: "Proxim" },
+  { code: "COFILL", libelle: "COFILL" },
+];
 
 export const LIBELLES_STATUTS: Record<StatutDemande, string> = {
   A_VALIDER: "À valider (Chef de Vente)",
@@ -53,4 +65,6 @@ export const PARAMETRES_DEFAUT: Record<string, { valeur: string; description: st
   MAX_ECHECS_CONNEXION: { valeur: "5", description: "Échecs de connexion consécutifs avant verrouillage du compte" },
   DUREE_VERROUILLAGE_MINUTES: { valeur: "15", description: "Durée du verrouillage après trop d'échecs" },
   MDP_LONGUEUR_MIN: { valeur: "10", description: "Longueur minimale des mots de passe" },
+  CR_JOURS_RETARD_MAX: { valeur: "3", description: "Nombre de jours passés pour lesquels un agent peut encore saisir un compte rendu" },
+  CR_PIECE_OBLIGATOIRE: { valeur: "1", description: "1 = l'état de stock système doit être annexé avant de soumettre un compte rendu" },
 };

@@ -6,6 +6,7 @@ import { auditer } from "@/lib/audit";
 import { ouvrirSession, fermerSession, utilisateurCourant } from "@/lib/auth/session";
 import { verifierMotDePasse, verificationFactice } from "@/lib/auth/mot-de-passe";
 import { parametreNombre } from "@/lib/parametres";
+import { accueilDuRole, type CodeRole } from "@/lib/constantes";
 
 export type EtatConnexion = { erreur?: string };
 
@@ -47,7 +48,7 @@ export async function seConnecter(_: EtatConnexion, form: FormData): Promise<Eta
   });
   await ouvrirSession(login, u.versionSession);
   await auditer({ action: "CONNEXION", login, codeRole: u.codeRole, entite: "Utilisateur", cleEntite: login });
-  redirect(u.doitChangerMotDePasse ? "/mot-de-passe?obligatoire=1" : "/demandes");
+  redirect(u.doitChangerMotDePasse ? "/mot-de-passe?obligatoire=1" : accueilDuRole(u.codeRole as CodeRole));
 }
 
 export async function seDeconnecter() {

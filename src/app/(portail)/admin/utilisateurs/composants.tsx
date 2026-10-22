@@ -6,7 +6,7 @@ import * as act from "./actions";
 type Ref = { roles: { code: string; libelle: string }[]; canaux: { code: string; libelle: string }[]; depots: { code: string; libelle: string }[] };
 type Affectation = { codeCanal: string; codeDepot: string | null };
 type Utilisateur = {
-  login: string; nomComplet: string; email: string; codeRole: string; isActif: boolean; verrouille: boolean;
+  login: string; nomComplet: string; email: string; codeRole: string; codeDepotAgent: string | null; isActif: boolean; verrouille: boolean;
   doitChangerMotDePasse: boolean; derniereConnexion: string | null; affectations: Affectation[];
 };
 
@@ -38,6 +38,14 @@ function ChampsFiche({ v, set, reference, loginModifiable }: { v: Omit<Utilisate
           {reference.roles.map((r) => <option key={r.code} value={r.code}>{r.libelle}</option>)}
         </select>
       </label>
+      {v.codeRole === "AGENT_DEPOT" && (
+        <label className="etiquette">Dépôt de l&apos;agent
+          <select className="champ" value={v.codeDepotAgent ?? ""} onChange={(e) => set({ codeDepotAgent: e.target.value || null })}>
+            <option value="">Choisir un dépôt</option>
+            {reference.depots.map((d) => <option key={d.code} value={d.code}>{d.libelle}</option>)}
+          </select>
+        </label>
+      )}
       {avecCanaux && (
         <div className="md:col-span-4 flex flex-col gap-1">
           <span className="text-sm font-medium">Canaux{sup ? " et dépôt imposé" : ""}</span>
@@ -60,7 +68,7 @@ function ChampsFiche({ v, set, reference, loginModifiable }: { v: Omit<Utilisate
 }
 
 export function NouvelUtilisateur({ reference }: { reference: Ref }) {
-  const vide = { login: "", nomComplet: "", email: "", codeRole: "SUPERVISEUR", affectations: [] as Affectation[] };
+  const vide = { login: "", nomComplet: "", email: "", codeRole: "SUPERVISEUR", codeDepotAgent: null as string | null, affectations: [] as Affectation[] };
   const [v, setV] = useState(vide);
   const [r, setR] = useState<act.Resultat | null>(null);
   const [enCours, demarrer] = useTransition();
@@ -71,9 +79,9 @@ export function NouvelUtilisateur({ reference }: { reference: Ref }) {
         <ChampsFiche v={v} set={(p) => setV((x) => ({ ...x, ...p }))} reference={reference} loginModifiable />
         <div>
           <button className="btn" disabled={enCours} onClick={() => demarrer(async () => {
-            const res = await act.creerUtilisateur({ login: v.login, nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole });
+            const res = await act.creerUtilisateur({ login: v.login, nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole, codeDepotAgent: v.codeDepotAgent });
             if (res.ok && v.affectations.length) {
-              const a = await act.majUtilisateur({ login: v.login.trim().toLowerCase(), nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole }, v.affectations);
+              const a = await act.majUtilisateur({ login: v.login.trim().toLowerCase(), nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole, codeDepotAgent: v.codeDepotAgent }, v.affectations);
               if (!a.ok) res.message += ` Affectations non enregistrées : ${a.message}`;
             }
             setR(res);
@@ -104,7 +112,7 @@ export function FicheUtilisateur({ utilisateur: u, reference, moi }: { utilisate
       <tr className={u.isActif ? "" : "opacity-60"}>
         <td><div className="font-medium">{u.nomComplet}</div><div className="note font-mono text-xs">{u.login}</div></td>
         <td>{role}</td>
-        <td>{u.affectations.map((a) => `${libelleCanal(a.codeCanal)}${a.codeDepot ? ` → ${libelleDepot(a.codeDepot)}` : ""}`).join(", ") || "—"}</td>
+        <td>{u.codeRole === "AGENT_DEPOT" ? `Dépôt ${libelleDepot(u.codeDepotAgent) ?? "non affecté"}` : u.affectations.map((a) => `${libelleCanal(a.codeCanal)}${a.codeDepot ? ` → ${libelleDepot(a.codeDepot)}` : ""}`).join(", ") || "—"}</td>
         <td className="flex flex-wrap gap-1">
           <span className="badge">{u.isActif ? "Actif" : "Désactivé"}</span>
           {u.verrouille && <span className="badge bg-red-100 text-red-800">Verrouillé</span>}
@@ -119,7 +127,7 @@ export function FicheUtilisateur({ utilisateur: u, reference, moi }: { utilisate
             <div className="flex flex-col gap-3 p-2">
               <ChampsFiche v={v} set={(p) => setV((x) => ({ ...x, ...p }))} reference={reference} loginModifiable={false} />
               <div className="flex flex-wrap gap-2">
-                <button className="btn" disabled={enCours} onClick={() => lancer(() => act.majUtilisateur({ login: v.login, nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole }, v.affectations))}>Enregistrer</button>
+                <button className="btn" disabled={enCours} onClick={() => lancer(() => act.majUtilisateur({ login: v.login, nomComplet: v.nomComplet, email: v.email, codeRole: v.codeRole, codeDepotAgent: v.codeDepotAgent }, v.affectations))}>Enregistrer</button>
                 <button className="btn-secondaire" disabled={enCours} onClick={() => lancer(() => act.reinitialiserMotDePasse(u.login), `Réinitialiser le mot de passe de ${u.login} ?`)}>Réinitialiser le mot de passe</button>
                 {u.verrouille && <button className="btn-secondaire" disabled={enCours} onClick={() => lancer(() => act.deverrouiller(u.login))}>Déverrouiller</button>}
                 {u.login !== moi && (

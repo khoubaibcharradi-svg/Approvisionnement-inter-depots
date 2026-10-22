@@ -6,11 +6,12 @@ import { auditer } from "@/lib/audit";
 import { exigerUtilisateur, ouvrirSession } from "@/lib/auth/session";
 import { controlerPolitique, hacherMotDePasse, verifierMotDePasse } from "@/lib/auth/mot-de-passe";
 import { parametreNombre } from "@/lib/parametres";
+import { accueilDuRole } from "@/lib/constantes";
 
 export type EtatMotDePasse = { erreur?: string };
 
 export async function changerMotDePasse(_: EtatMotDePasse, form: FormData): Promise<EtatMotDePasse> {
-  const moi = await exigerUtilisateur(undefined, { autoriserMdpExpire: true });
+  const moi = await exigerUtilisateur(undefined, { autoriserMdpExpire: true, tousRoles: true });
   const actuel = String(form.get("actuel") ?? "");
   const nouveau = String(form.get("nouveau") ?? "");
   const confirmation = String(form.get("confirmation") ?? "");
@@ -38,5 +39,5 @@ export async function changerMotDePasse(_: EtatMotDePasse, form: FormData): Prom
   // Les autres sessions ouvertes sont invalidées ; celle-ci est renouvelée.
   await ouvrirSession(moi.login, maj.versionSession);
   await auditer({ action: "MDP_CHANGE", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: moi.login });
-  redirect("/demandes?mdp=1");
+  redirect(`${accueilDuRole(moi.role)}?mdp=1`);
 }

@@ -16,7 +16,16 @@ const fiche = z.object({
   nomComplet: z.string().trim().min(2).max(100),
   email: z.email().max(150).or(z.literal("")).optional(),
   codeRole: z.enum(Object.keys(LIBELLES_ROLES) as [string, ...string[]]),
+  codeDepotAgent: z.string().max(30).nullish(),
 });
+
+/** Un agent dépôt doit être rattaché à un dépôt ; les autres rôles n'en ont pas. */
+async function depotAgent(s: z.infer<typeof fiche>) {
+  if (s.codeRole !== ROLES.AGENT_DEPOT) return null;
+  if (!s.codeDepotAgent) throw new Error("Un agent dépôt doit être affecté à un dépôt.");
+  if (!(await prisma.depot.findUnique({ where: { code: s.codeDepotAgent } }))) throw new Error("Dépôt inconnu.");
+  return s.codeDepotAgent;
+}
 const affectations = z.array(z.object({ codeCanal: z.string().max(30), codeDepot: z.string().max(30).nullable() })).max(10);
 
 async function admin() {
@@ -42,13 +51,13 @@ export async function creerUtilisateur(saisie: unknown): Promise<Resultat> {
     const existant = await prisma.utilisateur.findUnique({ where: { login: s.login } });
     if (existant) throw new Error(`L'identifiant ${s.login} existe déjà.`);
     const temporaire = genererMotDePasseTemporaire();
-    const champs = { nomComplet: s.nomComplet, email: s.email || null, codeRole: s.codeRole, motDePasseHash: await hacherMotDePasse(temporaire), doitChangerMotDePasse: true };
+    const champs = { nomComplet: s.nomComplet, email: s.email || null, codeRole: s.codeRole, codeDepotAgent: await depotAgent(s), motDePasseHash: await hacherMotDePasse(temporaire), doitChangerMotDePasse: true };
     await prisma.utilisateur.upsert({
       where: { login: s.login },
       create: { login: s.login, ...champs, creePar: moi.login },
       update: { ...champs, isDeleted: false, isActif: true, dateSuppression: null, supprimePar: null, versionSession: { increment: 1 }, nbEchecsConnexion: 0, verrouilleJusqua: null, modifiePar: moi.login },
     });
-    await auditer({ action: "UTILISATEUR_CREE", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: s.login, apres: { nomComplet: s.nomComplet, role: s.codeRole, email: s.email } });
+    await auditer({ action: "UTILISATEUR_CREE", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: s.login, apres: { nomComplet: s.nomComplet, role: s.codeRole, email: s.email, depotAgent: s.codeDepotAgent ?? null } });
     return { ok: true, message: `Compte ${s.login} créé.`, motDePasseTemporaire: temporaire };
   });
 }
@@ -60,13 +69,16 @@ export async function majUtilisateur(saisie: unknown, aff: unknown): Promise<Res
     const nouvelles = affectations.parse(aff);
     if (s.login === moi.login && s.codeRole !== ROLES.ADMINISTRATEUR) throw new Error("Vous ne pouvez pas retirer votre propre rôle d'administrateur.");
     if (s.codeRole === ROLES.SUPERVISEUR && nouvelles.some((a) => !a.codeDepot)) throw new Error("Un superviseur doit avoir un dépôt pour chaque canal.");
+    const codeDepotAgent = await depotAgent(s);
     await prisma.$transaction(async (tx) => {
       const avant = await tx.utilisateur.findUniqueOrThrow({ where: { login: s.login }, include: { affectations: { where: { isDeleted: false } } } });
-      const changementRole = avant.codeRole !== s.codeRole;
+      const changementRole = avant.codeRole !== s.codeRole || avant.codeDepotAgent !== codeDepotAgent;
       await tx.utilisateur.update({
         where: { login: s.login },
-        data: { nomComplet: s.nomComplet, email: s.email || null, codeRole: s.codeRole, modifiePar: moi.login, ...(changementRole ? { versionSession: { increment: 1 } } : {}) },
+        data: { nomComplet: s.nomComplet, email: s.email || null, codeRole: s.codeRole, codeDepotAgent, modifiePar: moi.login, ...(changementRole ? { versionSession: { increment: 1 } } : {}) },
       });
+      // Les canaux ne concernent que les superviseurs et chefs de vente.
+      if (s.codeRole !== ROLES.SUPERVISEUR && s.codeRole !== ROLES.CHEF_VENTE) nouvelles.length = 0;
       const codes = new Set(nouvelles.map((a) => a.codeCanal));
       for (const a of avant.affectations.filter((x) => !codes.has(x.codeCanal))) {
         await tx.affectation.update({ where: { login_codeCanal: { login: s.login, codeCanal: a.codeCanal } }, data: champsSuppression(moi.login) });
@@ -85,8 +97,8 @@ export async function majUtilisateur(saisie: unknown, aff: unknown): Promise<Res
           codeRole: moi.role,
           entite: "Utilisateur",
           cleEntite: s.login,
-          avant: { nomComplet: avant.nomComplet, email: avant.email, role: avant.codeRole, affectations: avant.affectations.map((a) => ({ canal: a.codeCanal, depot: a.codeDepot })) },
-          apres: { nomComplet: s.nomComplet, email: s.email, role: s.codeRole, affectations: nouvelles.map((a) => ({ canal: a.codeCanal, depot: a.codeDepot })) },
+          avant: { nomComplet: avant.nomComplet, email: avant.email, role: avant.codeRole, depotAgent: avant.codeDepotAgent, affectations: avant.affectations.map((a) => ({ canal: a.codeCanal, depot: a.codeDepot })) },
+          apres: { nomComplet: s.nomComplet, email: s.email, role: s.codeRole, depotAgent: codeDepotAgent, affectations: nouvelles.map((a) => ({ canal: a.codeCanal, depot: a.codeDepot })) },
         },
         tx,
       );

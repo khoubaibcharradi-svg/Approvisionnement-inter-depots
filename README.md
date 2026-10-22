@@ -105,6 +105,27 @@ Chaque événement d'audit est écrit à la fois dans la base (dans la même tra
 - **Restauration** : `npm run db:restore -- <fichier> --confirmer`. Le script vérifie l'empreinte SHA-256 et le marqueur de fin, sauvegarde l'état courant, puis rejoue le fichier dans une transaction.
 - **Important** : copier régulièrement le dossier `backups/` sur un autre serveur ou un stockage externe. Une sauvegarde qui reste sur la même machine ne protège pas contre une panne de disque.
 
+## Comptes rendus journaliers des dépôts (ENR-08)
+
+Le module numérise le formulaire papier « Compte rendu journalier dépôt ».
+
+- **Rôle `AGENT_DEPOT`** : l'agent est rattaché à **un dépôt**, choisi dans « Utilisateurs ». Il n'a accès qu'à « Compte rendu journalier », « Historique » et « Mon mot de passe ». Les demandes, le catalogue et l'administration lui sont refusés côté serveur, et chaque tentative est auditée.
+- **Magasins** (menu « Magasins », administrateur) : chaque magasin appartient à un dépôt et à une société (Promofood, Beesky, Proxim, COFILL…). Les magasins actifs d'un dépôt forment les lignes « situation du stock » de son compte rendu.
+- **Un compte rendu par dépôt et par jour** (`CR-000001`). L'agent peut saisir aujourd'hui et les `CR_JOURS_RETARD_MAX` jours précédents (3 par défaut). Il l'enregistre d'abord en **brouillon**, puis le **soumet**. Une fois soumis, le compte rendu n'est plus modifiable.
+- **Complétude contrôlée à la soumission**, côté serveur (`src/lib/compte-rendu/calculs.ts`). Tous les montants et toutes les rubriques doivent être renseignés (« RAS » accepté pour les textes). Une justification est obligatoire pour tout écart. Il faut au moins un véhicule, ou cocher « aucun véhicule ». L'état de stock système doit être annexé (`CR_PIECE_OBLIGATOIRE`).
+- **Calculs refaits par le serveur**, en millimes :
+  - stock théorique = initial + réceptions − ventes + retours ;
+  - écart de recette = recette − (comptant + recouvrement) ;
+  - caisse : D = A + B − C, et écart = E − D ;
+  - solde courant des dépenses.
+- **Continuité** : le stock initial, les soldes veille de caisse et le solde veille des dépenses sont repris du dernier compte rendu soumis du dépôt. Ils ne sont pas modifiables.
+- **Consultation réservée à l'administrateur** (« Comptes rendus dépôts ») :
+  - filtres : date de début, date de fin, dépôt, magasin, agent, statut ;
+  - écarts en rouge ;
+  - alerte sur les dépôts sans compte rendu soumis la veille ;
+  - détail complet et téléchargement des annexes.
+- **Pièces jointes** : stockées dans `PIECES_DIR` (`./pieces-jointes`), avec leur empreinte SHA-256 en base. **Ce dossier doit être sauvegardé avec `backups/`** : la sauvegarde texte ne contient que la base.
+
 ## Structure
 
 ```

@@ -21,6 +21,15 @@ const MODELES_SUPPRESSION_LOGIQUE = new Set([
   "DemandeModification",
   "ImportFichier",
   "Parametre",
+  "Societe",
+  "Magasin",
+  "CompteRendu",
+  "CompteRenduStock",
+  "CompteRenduVehicule",
+  "CompteRenduRecette",
+  "CompteRenduCaisse",
+  "CompteRenduDepense",
+  "CompteRenduPiece",
 ]);
 
 const LECTURES = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "aggregate", "groupBy"]);

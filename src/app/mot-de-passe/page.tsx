@@ -3,7 +3,7 @@ import { exigerUtilisateur } from "@/lib/auth/session";
 import { FormulaireMotDePasse } from "./formulaire";
 
 export default async function PageMotDePasse({ searchParams }: { searchParams: Promise<{ obligatoire?: string }> }) {
-  const u = await exigerUtilisateur(undefined, { autoriserMdpExpire: true });
+  const u = await exigerUtilisateur(undefined, { autoriserMdpExpire: true, tousRoles: true });
   const { obligatoire } = await searchParams;
   return (
     <main className="mx-auto mt-12 max-w-sm px-4">
@@ -14,7 +14,7 @@ export default async function PageMotDePasse({ searchParams }: { searchParams: P
       )}
       <FormulaireMotDePasse />
       {!u.doitChangerMotDePasse && (
-        <Link href="/demandes" className="note mt-4 block underline">Retour aux demandes</Link>
+        <Link href="/" className="note mt-4 block underline">Retour à l&apos;accueil</Link>
       )}
     </main>
   );

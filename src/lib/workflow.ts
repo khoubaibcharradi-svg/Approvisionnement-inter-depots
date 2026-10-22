@@ -22,6 +22,7 @@ export const ETAPE_REJET = { CHEF_VENTE: 1, DIRECTEUR_COMMERCIAL: 2, RADES: 3 } 
 
 /** Visibilité (§3) : le superviseur voit ses demandes, le chef de vente son circuit, les autres tout. */
 export function peutVoir(a: Acteur, d: EtatDemande) {
+  if (a.role === ROLES.AGENT_DEPOT) return false;
   if (a.role === ROLES.SUPERVISEUR) return d.loginSaisie === a.login;
   if (a.role === ROLES.CHEF_VENTE) return a.canaux.includes(d.codeCanal);
   return true;

@@ -40,6 +40,7 @@ export default async function PageUtilisateurs() {
                   nomComplet: u.nomComplet,
                   email: u.email ?? "",
                   codeRole: u.codeRole,
+                  codeDepotAgent: u.codeDepotAgent,
                   isActif: u.isActif,
                   verrouille: !!u.verrouilleJusqua && u.verrouilleJusqua > maintenant,
                   doitChangerMotDePasse: u.doitChangerMotDePasse,

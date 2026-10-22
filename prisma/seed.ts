@@ -9,7 +9,7 @@ import path from "node:path";
 import { prisma } from "../src/lib/prisma";
 import { lireFeuilleXlsx, lireNombre, codeMetier } from "../src/lib/tableur";
 import { hacherMotDePasse } from "../src/lib/auth/mot-de-passe";
-import { LIBELLES_ROLES, PARAMETRES_DEFAUT, ROLES, type CodeRole } from "../src/lib/constantes";
+import { LIBELLES_ROLES, PARAMETRES_DEFAUT, ROLES, SOCIETES_DEFAUT, type CodeRole } from "../src/lib/constantes";
 
 const AUTEUR = "seed";
 const FICHIER = path.resolve(process.env.SEED_FICHIER || path.join(__dirname, "data", "parametrage.xlsx"));
@@ -63,6 +63,11 @@ async function main() {
       create: { code: c.code, libelle: c.libelle, ordre: i + 1, creePar: AUTEUR },
       update: { libelle: c.libelle, modifiePar: AUTEUR },
     });
+  }
+
+  // Sociétés (les magasins sont saisis ensuite par l'administrateur)
+  for (const [i, s] of SOCIETES_DEFAUT.entries()) {
+    await prisma.societe.upsert({ where: { code: s.code }, create: { ...s, ordre: i + 1, creePar: AUTEUR }, update: {} });
   }
 
   // Dépôts (la feuille n'a pas d'en-tête)
