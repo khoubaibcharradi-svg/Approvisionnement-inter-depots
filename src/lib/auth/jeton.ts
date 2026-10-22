@@ -6,9 +6,22 @@ export const NOM_COOKIE = "appro_session";
 
 export type ContenuJeton = { login: string; vs: number };
 
+let avertissementAffiche = false;
+
 function cle() {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 32) throw new Error("SESSION_SECRET manquant ou trop court (32 caractères minimum)");
+  let s = process.env.SESSION_SECRET?.trim();
+  if (!s || s.length < 32) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET manquant ou trop court (32 caractères minimum)");
+    }
+    // Poste de développement uniquement : clé déterministe (identique dans proxy.ts et le serveur),
+    // pour ne pas bloquer un test local. Jamais utilisée en production.
+    s = `cle-de-developpement-non-securisee::${process.env.DATABASE_URL ?? ""}`;
+    if (!avertissementAffiche) {
+      avertissementAffiche = true;
+      console.warn("⚠ SESSION_SECRET absent de .env : clé de développement utilisée (interdit en production).");
+    }
+  }
   return new TextEncoder().encode(s);
 }
 

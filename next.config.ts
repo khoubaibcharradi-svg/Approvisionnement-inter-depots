@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Adresses autorisées à ouvrir le serveur de développement depuis le réseau (ex. "192.168.1.243")
+  allowedDevOrigins: process.env.DEV_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean),
   serverExternalPackages: ["exceljs", "bcryptjs"],
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
