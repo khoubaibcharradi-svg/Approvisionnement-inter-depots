@@ -24,7 +24,7 @@ import {
 
 export class ErreurCompteRendu extends Error {}
 
-type EtatInventaire = Record<string, { nbLignes: number; sansPrix: number; erreurs: string[] }>;
+type EtatInventaire = Record<string, { statut: "EN_COURS" | "CLOTURE"; nbLignes: number; sansPrix: number; erreurs: string[] }>;
 
 /**
  * Situation du stock calculée depuis les inventaires en quantités, valorisés au coût de revient.
@@ -36,7 +36,9 @@ async function appliquerInventaires(tx: Transaction | typeof prisma, codeDepot: 
   const etat: EtatInventaire = {};
   for (const l of stocks) {
     const v = valorisation.get(l.codeMagasin);
-    if (v) {
+    if (v) etat[l.codeMagasin] = { statut: v.statut, nbLignes: v.nbLignes, sansPrix: v.sansPrix, erreurs: v.erreurs };
+    // Les valeurs n'apparaissent qu'une fois l'inventaire clôturé.
+    if (v?.statut === "CLOTURE") {
       Object.assign(l, {
         stockInitial: v.valeur.stockInitial,
         receptions: v.valeur.receptions,
@@ -44,8 +46,7 @@ async function appliquerInventaires(tx: Transaction | typeof prisma, codeDepot: 
         retours: v.valeur.retours,
         stockFinalReel: v.valeur.stockFinalReel,
       });
-      etat[l.codeMagasin] = { nbLignes: v.nbLignes, sansPrix: v.sansPrix, erreurs: v.erreurs };
-    } else if (obligatoire) {
+    } else if (obligatoire || v) {
       Object.assign(l, { receptions: null, ventes: null, retours: null, stockFinalReel: null });
     }
   }
@@ -53,7 +54,9 @@ async function appliquerInventaires(tx: Transaction | typeof prisma, codeDepot: 
     ? stocks.flatMap((l) =>
         !etat[l.codeMagasin]
           ? [`Stock ${l.codeMagasin} : inventaire du magasin non saisi (menu « Inventaire »).`]
-          : etat[l.codeMagasin].erreurs.map((e) => `Inventaire ${l.codeMagasin} : ${e}.`),
+          : etat[l.codeMagasin].statut !== "CLOTURE"
+            ? [`Stock ${l.codeMagasin} : inventaire non clôturé (menu « Inventaire », bouton « Clôturer l'inventaire »).`]
+            : etat[l.codeMagasin].erreurs.map((e) => `Inventaire ${l.codeMagasin} : ${e}.`),
       )
     : [];
   return { obligatoire, etat, manques };
@@ -124,6 +127,24 @@ export async function journeesAutorisees() {
   const retard = await parametreNombre("CR_JOURS_RETARD_MAX");
   const t = enDate(aujourdhui());
   return Array.from({ length: retard + 1 }, (_, i) => jour(new Date(t.getTime() - i * 86_400_000)));
+}
+
+/**
+ * Journées accessibles à un dépôt : la fenêtre normale, plus les journées dont un inventaire
+ * a été rouvert par l'administrateur (exception motivée) et dont le compte rendu n'est pas soumis.
+ */
+export async function journeesAccessibles(codeDepot: string) {
+  const fenetre = await journeesAutorisees();
+  const rouverts = await prisma.inventaire.findMany({
+    where: { codeDepot, statut: "EN_COURS", nbReouvertures: { gt: 0 } },
+    select: { dateJournee: true },
+    distinct: ["dateJournee"],
+  });
+  const soumis = new Set(
+    (await prisma.compteRendu.findMany({ where: { codeDepot, statut: "SOUMIS", dateJournee: { in: rouverts.map((r) => r.dateJournee) } }, select: { dateJournee: true } })).map((c) => jour(c.dateJournee)),
+  );
+  const rouvertes = rouverts.map((r) => jour(r.dateJournee)).filter((d) => !soumis.has(d) && !fenetre.includes(d)).sort().reverse();
+  return { dates: [...fenetre, ...rouvertes], rouvertes };
 }
 
 // ───────────────────────────── Chargement ─────────────────────────────
@@ -223,7 +244,7 @@ function exigerAgent(a: UtilisateurCourant) {
 
 export async function chargerJournee(agent: UtilisateurCourant, dateJournee: string) {
   const codeDepot = exigerAgent(agent);
-  const dates = await journeesAutorisees();
+  const { dates } = await journeesAccessibles(codeDepot);
   const [depot, magasins, societes, existant, veille, vehicules] = await Promise.all([
     prisma.depot.findUniqueOrThrow({ where: { code: codeDepot } }),
     prisma.magasin.findMany({ where: { codeDepot, isActif: true }, include: { societe: true }, orderBy: [{ codeSociete: "asc" }, { libelle: "asc" }] }),
@@ -309,7 +330,7 @@ const actif = (login: string) => ({ isDeleted: false, isActif: true, dateSuppres
  */
 export async function enregistrer(agent: UtilisateurCourant, dateJournee: string, version: number | null, brut: unknown, soumettre: boolean) {
   const codeDepot = exigerAgent(agent);
-  if (!(await journeesAutorisees()).includes(dateJournee)) {
+  if (!(await journeesAccessibles(codeDepot)).dates.includes(dateJournee)) {
     throw new ErreurCompteRendu("Cette journée n'est plus ouverte à la saisie : contactez l'administrateur.");
   }
   const saisie = schemaSaisie.parse(brut);

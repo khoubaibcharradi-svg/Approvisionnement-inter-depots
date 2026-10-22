@@ -47,9 +47,10 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const erreurs = controlerInventaire(lignes);
   const concernees = lignes.filter(ligneConcernee).length;
 
-  const enregistrer = () =>
+  const enregistrer = (cloturer: boolean) =>
     demarrer(async () => {
-      const r = await enregistrerInventaire(inv.dateJournee, m.code, lignes.filter(ligneConcernee));
+      if (cloturer && !confirm("Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")) return;
+      const r = await enregistrerInventaire(inv.dateJournee, m.code, lignes.filter(ligneConcernee), cloturer);
       setMessage({ ok: r.ok, texte: r.message });
       if (r.ok) {
         setModifie(false);
@@ -65,8 +66,21 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
         <span>Journée : <b>{new Date(`${inv.dateJournee}T12:00:00`).toLocaleDateString("fr-FR")}</b></span>
         <span>{concernees} article(s) saisi(s)</span>
         {inv.derniereSaisie && <span className="note">Dernier enregistrement : {new Date(inv.derniereSaisie.date).toLocaleString("fr-FR")} ({inv.derniereSaisie.login})</span>}
-        {lecture && <span className="badge bg-emerald-100 text-emerald-800">Compte rendu soumis : lecture seule</span>}
+        {inv.entete?.statut === "CLOTURE" && <span className="badge bg-emerald-100 text-emerald-800">🔒 Clôturé le {new Date(inv.entete.dateCloture!).toLocaleString("fr-FR")} ({inv.entete.loginCloture})</span>}
+        {inv.entete?.statut !== "CLOTURE" && inv.compteRenduSoumis && <span className="badge bg-emerald-100 text-emerald-800">Compte rendu soumis : lecture seule</span>}
+        {inv.entete?.statut === "EN_COURS" && <span className="badge bg-amber-100 text-amber-800">En cours</span>}
       </div>
+      {inv.entete?.statut === "CLOTURE" && (
+        <p className="alerte-ok">Inventaire clôturé : les quantités ne sont plus modifiables. En cas d&apos;erreur, demandez à l&apos;administrateur de le rouvrir.</p>
+      )}
+      {(inv.entete?.reouvertures.length ?? 0) > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <b>Réouverture(s) par l&apos;administrateur :</b>
+          <ul className="list-disc pl-5">
+            {inv.entete!.reouvertures.map((r) => <li key={r.numero}>{new Date(r.date).toLocaleString("fr-FR")} · {r.loginAdmin} : {r.motif}</li>)}
+          </ul>
+        </div>
+      )}
       {inv.reprise && !lecture && <p className="note">Stock initial = stock final réel de l&apos;inventaire du {inv.reprise.date} (non modifiable).</p>}
       {!inv.reprise && !lecture && <p className="note">Premier inventaire de ce magasin : saisissez le stock initial de chaque article présent.</p>}
 
@@ -115,7 +129,9 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-end gap-2">
             {erreurs.length > 0 && <span className="note mr-auto text-amber-700">À compléter : {erreurs.join(" ; ")}</span>}
             {modifie && !erreurs.length && <span className="note mr-auto">Modifications non enregistrées</span>}
-            <button className="btn" disabled={enCours} onClick={enregistrer}>{enCours ? "Enregistrement…" : "Enregistrer l'inventaire"}</button>
+            <button className="btn-secondaire" disabled={enCours} onClick={() => enregistrer(false)}>{enCours ? "Enregistrement…" : "Enregistrer l'inventaire"}</button>
+            <button className="btn" disabled={enCours || erreurs.length > 0 || concernees === 0} title={erreurs.length ? "Comptez tous les articles concernés avant de clôturer" : undefined}
+              onClick={() => enregistrer(true)}>Clôturer l&apos;inventaire</button>
           </div>
         </div>
       )}

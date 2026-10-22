@@ -71,6 +71,11 @@ enum RubriquePiece {
   DEPENSES
 }
 
+enum StatutInventaire {
+  EN_COURS
+  CLOTURE
+}
+
 enum NatureCaisse {
   ESPECES
   CHEQUES
@@ -402,7 +407,7 @@ model Magasin {
   societe     Societe            @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
   stocks      CompteRenduStock[]
   vehicules   Vehicule[]
-  inventaires InventaireLigne[]
+  inventaires Inventaire[]
 
   @@index([codeDepot])
   @@index([codeSociete])
@@ -434,6 +439,51 @@ model Vehicule {
   @@map("vehicule")
 }
 
+/// En-tête de l'inventaire d'un magasin pour une journée : clôturé par l'agent,
+/// il n'est plus modifiable sauf réouverture motivée par l'administrateur.
+model Inventaire {
+  codeMagasin      String           @db.VarChar(30)
+  dateJournee      DateTime         @db.Date
+  codeDepot        String           @db.VarChar(30)
+  statut           StatutInventaire @default(EN_COURS)
+  dateCloture      DateTime?
+  loginCloture     String?          @db.VarChar(50)
+  nbReouvertures   Int              @default(0)
+  version          Int              @default(0)
+  isActif          Boolean          @default(true)
+  isDeleted        Boolean          @default(false)
+  dateCreation     DateTime         @default(now())
+  creePar          String?          @db.VarChar(50)
+  dateModification DateTime         @updatedAt
+  modifiePar       String?          @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?          @db.VarChar(50)
+
+  magasin      Magasin                 @relation(fields: [codeMagasin], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  lignes       InventaireLigne[]
+  reouvertures InventaireReouverture[]
+
+  @@id([codeMagasin, dateJournee])
+  @@index([codeDepot, dateJournee])
+  @@index([statut])
+  @@map("inventaire")
+}
+
+/// Historique des réouvertures d'inventaire par l'administrateur (ajout seul).
+model InventaireReouverture {
+  codeMagasin     String   @db.VarChar(30)
+  dateJournee     DateTime @db.Date
+  numero          Int
+  motif           String   @db.Text
+  loginAdmin      String   @db.VarChar(50)
+  dateReouverture DateTime @default(now()) @db.DateTime(3)
+
+  inventaire Inventaire @relation(fields: [codeMagasin, dateJournee], references: [codeMagasin, dateJournee], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([codeMagasin, dateJournee, numero])
+  @@map("inventaire_reouverture")
+}
+
 /// Inventaire journalier en quantités (pièces) : une ligne par magasin, journée et article.
 /// Il alimente, valorisé au prix de revient, la « situation du stock » du compte rendu.
 model InventaireLigne {
@@ -463,8 +513,8 @@ model InventaireLigne {
   dateSuppression     DateTime?
   supprimePar         String?   @db.VarChar(50)
 
-  magasin Magasin @relation(fields: [codeMagasin], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  article Article @relation(fields: [codeArticle], references: [codeArticle], onUpdate: Cascade, onDelete: Restrict)
+  inventaire Inventaire @relation(fields: [codeMagasin, dateJournee], references: [codeMagasin, dateJournee], onUpdate: Cascade, onDelete: Restrict)
+  article    Article    @relation(fields: [codeArticle], references: [codeArticle], onUpdate: Cascade, onDelete: Restrict)
 
   @@id([codeMagasin, dateJournee, codeArticle])
   @@index([codeDepot, dateJournee])

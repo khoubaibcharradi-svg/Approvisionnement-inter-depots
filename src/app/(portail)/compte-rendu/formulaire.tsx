@@ -155,7 +155,8 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
                 return (
                   <li key={l.codeMagasin}>
                     <a className="font-medium underline" href={lienInventaire(l.codeMagasin)}>{nom}</a> :{" "}
-                    {!e ? <span className="text-red-700">inventaire non saisi</span> : <>
+                    {!e ? <span className="text-red-700">inventaire non saisi</span> : e.statut !== "CLOTURE" ? <span className="text-amber-700">inventaire en cours, non clôturé : les valeurs s&apos;afficheront après la clôture</span> : <>
+                      🔒 clôturé · 
                       {e.nbLignes} article(s)
                       {e.erreurs.length > 0 && <span className="text-red-700"> · {e.erreurs.join(" ; ")}</span>}
                       {e.sansPrix > 0 && <span className="text-amber-700"> · {e.sansPrix} article(s) sans prix de revient (valorisés à 0)</span>}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { ROLES } from "@/lib/constantes";
-import { chargerJournee, journeesAutorisees } from "@/lib/compte-rendu/service";
+import { chargerJournee, journeesAccessibles } from "@/lib/compte-rendu/service";
 import { auditer } from "@/lib/audit";
 import { FormulaireCompteRendu } from "./formulaire";
 
@@ -11,7 +11,7 @@ export default async function PageCompteRendu({ searchParams }: { searchParams: 
   if (!u.codeDepotAgent) {
     return <p className="alerte-erreur">Aucun dépôt ne vous est affecté : contactez l&apos;administrateur.</p>;
   }
-  const dates = await journeesAutorisees();
+  const { dates } = await journeesAccessibles(u.codeDepotAgent);
   const date = p.date && dates.includes(p.date) ? p.date : dates[0];
   if (p.date && p.date !== date) {
     await auditer({ action: "COMPTE_RENDU_JOURNEE_REFUSEE", login: u.login, codeRole: u.role, entite: "CompteRendu", detail: p.date.slice(0, 10), succes: false });

@@ -13,6 +13,7 @@ const MENU: { href: string; libelle: string; roles?: CodeRole[]; saufRoles?: Cod
   { href: "/audit", libelle: "Journal d'audit", saufRoles: [ROLES.SUPERVISEUR, ROLES.CHEF_VENTE, ROLES.AGENT_DEPOT] },
   { href: "/statistiques", libelle: "Statistiques", roles: [ROLES.ADMINISTRATEUR] },
   { href: "/admin/comptes-rendus", libelle: "Comptes rendus dépôts", roles: [ROLES.ADMINISTRATEUR] },
+  { href: "/admin/inventaires", libelle: "Inventaires", roles: [ROLES.ADMINISTRATEUR] },
   { href: "/admin/magasins", libelle: "Magasins", roles: [ROLES.ADMINISTRATEUR] },
   { href: "/admin/vehicules", libelle: "Véhicules", roles: [ROLES.ADMINISTRATEUR] },
   { href: "/admin/utilisateurs", libelle: "Utilisateurs", roles: [ROLES.ADMINISTRATEUR] },

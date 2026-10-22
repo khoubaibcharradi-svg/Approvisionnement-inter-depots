@@ -10,16 +10,17 @@ import { enregistrerInventaire as enregistrer } from "@/lib/compte-rendu/inventa
 
 export type Resultat = { ok: boolean; message: string };
 
-export async function enregistrerInventaire(dateJournee: string, codeMagasin: string, lignes: unknown): Promise<Resultat> {
+export async function enregistrerInventaire(dateJournee: string, codeMagasin: string, lignes: unknown, cloturer = false): Promise<Resultat> {
   const u = await exigerUtilisateur([ROLES.AGENT_DEPOT]);
   try {
-    const r = await enregistrer(u, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(dateJournee), z.string().max(30).parse(codeMagasin), lignes);
+    const r = await enregistrer(u, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(dateJournee), z.string().max(30).parse(codeMagasin), lignes, z.boolean().parse(cloturer));
     revalidatePath("/compte-rendu");
+    if (r.cloture) return { ok: true, message: `Inventaire clôturé (${r.articles} article(s)). Les valeurs sont reportées dans la situation du stock du compte rendu.` };
     return {
       ok: true,
       message: r.erreurs.length
         ? `Inventaire enregistré (${r.articles} article(s)). À compléter avant de soumettre le compte rendu : ${r.erreurs.join(" ; ")}.`
-        : `Inventaire enregistré (${r.articles} article(s)). La situation du stock du compte rendu est mise à jour.`,
+        : `Inventaire enregistré (${r.articles} article(s)). Clôturez-le pour reporter les valeurs dans le compte rendu.`,
     };
   } catch (e) {
     if (e instanceof ErreurCompteRendu) return { ok: false, message: e.message };
