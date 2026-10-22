@@ -1,0 +1,23 @@
+# /etc/systemd/system/appro.service — lance le portail au démarrage et le relance en cas d'arrêt
+[Unit]
+Description=Portail approvisionnement inter-depots (Next.js)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=appro
+WorkingDirectory=/opt/appro
+Environment=NODE_ENV=production
+Environment=TZ=Africa/Tunis
+ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+# Durcissement
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/appro
+
+[Install]
+WantedBy=multi-user.target
