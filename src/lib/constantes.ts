@@ -67,4 +67,5 @@ export const PARAMETRES_DEFAUT: Record<string, { valeur: string; description: st
   MDP_LONGUEUR_MIN: { valeur: "10", description: "Longueur minimale des mots de passe" },
   CR_JOURS_RETARD_MAX: { valeur: "3", description: "Nombre de jours passés pour lesquels un agent peut encore saisir un compte rendu" },
   CR_PIECE_OBLIGATOIRE: { valeur: "1", description: "1 = l'état de stock système doit être annexé avant de soumettre un compte rendu" },
+  CR_INVENTAIRE_OBLIGATOIRE: { valeur: "1", description: "1 = la situation du stock est calculée depuis l'inventaire en quantités de chaque magasin (obligatoire pour soumettre)" },
 };

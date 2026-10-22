@@ -9,6 +9,7 @@ import { auditer } from "../audit";
 import { prochainNumero } from "../compteur";
 import { parametreNombre } from "../parametres";
 import { ROLES } from "../constantes";
+import { valorisationDepot } from "./inventaire";
 import type { UtilisateurCourant } from "../auth/session";
 import {
   NATURES_CAISSE,
@@ -22,6 +23,41 @@ import {
 } from "./calculs";
 
 export class ErreurCompteRendu extends Error {}
+
+type EtatInventaire = Record<string, { nbLignes: number; sansPrix: number; erreurs: string[] }>;
+
+/**
+ * Situation du stock calculée depuis les inventaires en quantités, valorisés au coût de revient.
+ * Quand l'inventaire est obligatoire, un magasin sans inventaire reste vide (la soumission le signale).
+ */
+async function appliquerInventaires(tx: Transaction | typeof prisma, codeDepot: string, dateJournee: string, stocks: SaisieCompteRendu["stocks"]) {
+  const obligatoire = (await parametreNombre("CR_INVENTAIRE_OBLIGATOIRE")) === 1;
+  const valorisation = await valorisationDepot(tx, codeDepot, dateJournee);
+  const etat: EtatInventaire = {};
+  for (const l of stocks) {
+    const v = valorisation.get(l.codeMagasin);
+    if (v) {
+      Object.assign(l, {
+        stockInitial: v.valeur.stockInitial,
+        receptions: v.valeur.receptions,
+        ventes: v.valeur.ventes,
+        retours: v.valeur.retours,
+        stockFinalReel: v.valeur.stockFinalReel,
+      });
+      etat[l.codeMagasin] = { nbLignes: v.nbLignes, sansPrix: v.sansPrix, erreurs: v.erreurs };
+    } else if (obligatoire) {
+      Object.assign(l, { receptions: null, ventes: null, retours: null, stockFinalReel: null });
+    }
+  }
+  const manques = obligatoire
+    ? stocks.flatMap((l) =>
+        !etat[l.codeMagasin]
+          ? [`Stock ${l.codeMagasin} : inventaire du magasin non saisi (menu « Inventaire »).`]
+          : etat[l.codeMagasin].erreurs.map((e) => `Inventaire ${l.codeMagasin} : ${e}.`),
+      )
+    : [];
+  return { obligatoire, etat, manques };
+}
 
 // ───────────────────────────── Saisie (validation de forme) ─────────────────────────────
 
@@ -228,9 +264,13 @@ export async function chargerJournee(agent: UtilisateurCourant, dateJournee: str
       remarques: "",
     };
   }
+  const inventaire = existant?.statut === "SOUMIS"
+    ? { obligatoire: false, etat: {} as EtatInventaire, manques: [] as string[] }
+    : await appliquerInventaires(prisma, codeDepot, dateJournee, saisie.stocks);
   return {
     dateJournee,
     datesAutorisees: dates,
+    inventaire: { obligatoire: inventaire.obligatoire, etat: inventaire.etat, manques: inventaire.manques },
     modifiable: dates.includes(dateJournee) && existant?.statut !== "SOUMIS",
     depot: { code: depot.code, libelle: depot.libelle },
     magasins: magasins.map((m) => ({ code: m.code, libelle: m.libelle, societe: m.societe.libelle, codeSociete: m.codeSociete })),
@@ -304,13 +344,15 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
         for (const c of saisie.caisses) if (c.nature in r.soldeVeille) c.soldeVeille = r.soldeVeille[c.nature];
         saisie.soldeVeilleDepenses = r.soldeVeilleDepenses;
       }
+      // La situation du stock vient des inventaires (après la reprise : l'inventaire fait foi).
+      const inventaire = await appliquerInventaires(tx, codeDepot, dateJournee, saisie.stocks);
 
       let cr = await tx.compteRendu.findFirst({ where: { codeDepot, dateJournee: enDate(dateJournee) }, include: { pieces: { where: { isDeleted: false, rubrique: "STOCK" } } } });
       if (cr?.statut === "SOUMIS") throw new ErreurCompteRendu("Ce compte rendu est déjà soumis : il n'est plus modifiable.");
       if (cr && cr.version !== version) throw new ErreurCompteRendu("Le compte rendu a été modifié entre-temps (autre agent du dépôt). Rechargez la page.");
 
       if (soumettre) {
-        const manques = controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire });
+        const manques = [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire })];
         if (manques.length) throw new ErreurCompteRendu(`Compte rendu incomplet :\n• ${manques.join("\n• ")}`);
       }
 
@@ -567,6 +609,7 @@ export async function detailCompteRendu(numero: string) {
     numero: cr.numero,
     statut: cr.statut,
     dateJournee: jour(cr.dateJournee),
+    codeDepot: cr.codeDepot,
     depot: cr.depot.libelle,
     agent: `${cr.agent.nomComplet} (${cr.agent.login})`,
     dateSoumission: cr.dateSoumission,

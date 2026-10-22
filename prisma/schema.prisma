@@ -56,6 +56,7 @@ enum StatutModification {
 enum TypeImport {
   CATALOGUE
   STOCK
+  PRIX
 }
 
 enum StatutCompteRendu {
@@ -167,6 +168,9 @@ model Article {
   stockPieces      Int       @default(0)
   quotaPieces      Int       @default(0)
   rotationCartons  Decimal?  @db.Decimal(12, 2)
+  /// Coût de revient unitaire (dinars par pièce), base de la valorisation des inventaires.
+  prixRevient      Decimal   @default(0) @db.Decimal(14, 3)
+  dateMajPrix      DateTime?
   dateMajStock     DateTime?
   sourceStock      String?   @db.VarChar(150)
   version          Int       @default(0)
@@ -179,8 +183,9 @@ model Article {
   dateSuppression  DateTime?
   supprimePar      String?   @db.VarChar(50)
 
-  famille Famille        @relation(fields: [codeFamille], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  lignes  LigneDemande[]
+  famille     Famille           @relation(fields: [codeFamille], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  lignes      LigneDemande[]
+  inventaires InventaireLigne[]
 
   @@index([codeFamille])
   @@index([designation])
@@ -393,10 +398,11 @@ model Magasin {
   dateSuppression  DateTime?
   supprimePar      String?   @db.VarChar(50)
 
-  depot     Depot              @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  societe   Societe            @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
-  stocks    CompteRenduStock[]
-  vehicules Vehicule[]
+  depot       Depot              @relation(fields: [codeDepot], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  societe     Societe            @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  stocks      CompteRenduStock[]
+  vehicules   Vehicule[]
+  inventaires InventaireLigne[]
 
   @@index([codeDepot])
   @@index([codeSociete])
@@ -426,6 +432,44 @@ model Vehicule {
   @@index([codeDepot])
   @@index([codeMagasin])
   @@map("vehicule")
+}
+
+/// Inventaire journalier en quantités (pièces) : une ligne par magasin, journée et article.
+/// Il alimente, valorisé au prix de revient, la « situation du stock » du compte rendu.
+model InventaireLigne {
+  codeMagasin         String    @db.VarChar(30)
+  dateJournee         DateTime  @db.Date
+  codeArticle         String    @db.VarChar(30)
+  codeDepot           String    @db.VarChar(30)
+  /// Société du magasin au moment de l'inventaire (historique figé).
+  codeSociete         String    @db.VarChar(30)
+  stockInitial        Decimal   @default(0) @db.Decimal(14, 3)
+  receptions          Decimal   @default(0) @db.Decimal(14, 3)
+  ventes              Decimal   @default(0) @db.Decimal(14, 3)
+  retours             Decimal   @default(0) @db.Decimal(14, 3)
+  stockFinalTheorique Decimal   @default(0) @db.Decimal(14, 3)
+  /// Null tant que l'article n'a pas été compté.
+  stockFinalReel      Decimal?  @db.Decimal(14, 3)
+  ecart               Decimal   @default(0) @db.Decimal(14, 3)
+  /// Prix de revient appliqué (figé au moment de la saisie).
+  prixRevient         Decimal   @default(0) @db.Decimal(14, 3)
+  loginAgent          String    @db.VarChar(50)
+  isActif             Boolean   @default(true)
+  isDeleted           Boolean   @default(false)
+  dateCreation        DateTime  @default(now())
+  creePar             String?   @db.VarChar(50)
+  dateModification    DateTime  @updatedAt
+  modifiePar          String?   @db.VarChar(50)
+  dateSuppression     DateTime?
+  supprimePar         String?   @db.VarChar(50)
+
+  magasin Magasin @relation(fields: [codeMagasin], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  article Article @relation(fields: [codeArticle], references: [codeArticle], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([codeMagasin, dateJournee, codeArticle])
+  @@index([codeDepot, dateJournee])
+  @@index([codeArticle])
+  @@map("inventaire_ligne")
 }
 
 /// Compte rendu journalier d'un dépôt (ENR-08) : un seul par dépôt et par jour.

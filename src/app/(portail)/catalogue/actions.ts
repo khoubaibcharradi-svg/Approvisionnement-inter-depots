@@ -23,6 +23,7 @@ const schemaMaj = z.object({
   pcb: z.number().int().min(1).max(10_000).nullable().optional(),
   stockPieces: z.number().int().min(0).max(100_000_000).optional(),
   quotaPieces: z.number().int().min(0).max(100_000_000).optional(),
+  prixRevient: z.number().finite().min(0).max(1_000_000).optional(),
   isActif: z.boolean().optional(),
 });
 
@@ -39,6 +40,7 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
   if ((s.nouveauCode !== undefined || s.isActif !== undefined) && !ROLES_CODES.includes(u.role as (typeof ROLES_CODES)[number])) return refus("code SKU");
   if ((s.pcb !== undefined || s.stockPieces !== undefined) && u.role !== ROLES.DIRECTEUR_LOGISTIQUE) return refus("PCB / stock");
   if (s.quotaPieces !== undefined && u.role !== ROLES.DIRECTEUR_COMMERCIAL) return refus("quota");
+  if (s.prixRevient !== undefined && u.role !== ROLES.DIRECTEUR_LOGISTIQUE && u.role !== ROLES.ADMINISTRATEUR) return refus("prix de revient");
 
   try {
     const message = await prisma.$transaction(async (tx) => {
@@ -58,14 +60,15 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
           ...(s.pcb !== undefined ? { pcb: s.pcb } : {}),
           ...(s.stockPieces !== undefined ? { stockPieces: stock, dateMajStock: new Date(), sourceStock: `Saisie manuelle · ${u.login}` } : {}),
           ...(s.isActif !== undefined ? { isActif: s.isActif } : {}),
+          ...(s.prixRevient !== undefined && s.prixRevient !== a.prixRevient.toNumber() ? { prixRevient: s.prixRevient, dateMajPrix: new Date() } : {}),
           quotaPieces: quota,
           version: { increment: 1 },
           modifiePar: u.login,
         },
       });
       const champs = ["codeArticle", "pcb", "stockPieces", "quotaPieces", "isActif"] as const;
-      const avant = Object.fromEntries(champs.map((c) => [c, a[c]]));
-      const nouveau = Object.fromEntries(champs.map((c) => [c, apres[c]]));
+      const avant = { ...Object.fromEntries(champs.map((c) => [c, a[c]])), prixRevient: a.prixRevient.toNumber() };
+      const nouveau = { ...Object.fromEntries(champs.map((c) => [c, apres[c]])), prixRevient: apres.prixRevient.toNumber() };
       await auditer({ action: "ARTICLE_MODIFIE", login: u.login, codeRole: u.role, entite: "Article", cleEntite: a.codeArticle, avant, apres: nouveau }, tx);
       return quota < (s.quotaPieces ?? a.quotaPieces) ? `Enregistré · quota ramené au stock (${quota}).` : "Enregistré.";
     });
@@ -180,6 +183,48 @@ export async function importerStock(_: Resultat | null, form: FormData): Promise
     return { ok: true, message: `${r.numero} : ${r.majs} articles mis à jour, ${r.ignores} ignorés, ${r.quotas} quotas ramenés au stock.` };
   } catch (e) {
     journal.warn("Import stock en échec", { erreur: e, login: u.login });
+    return { ok: false, message: e instanceof Error ? e.message : "Fichier illisible." };
+  }
+}
+
+/** Import des prix de revient : Code article, Prix de revient (dinars par pièce). */
+export async function importerPrix(_: Resultat | null, form: FormData): Promise<Resultat> {
+  const u = await exigerUtilisateur([ROLES.DIRECTEUR_LOGISTIQUE, ROLES.ADMINISTRATEUR]);
+  try {
+    const { nom, lignes } = await lireFichier(form);
+    const r = await prisma.$transaction(
+      async (tx) => {
+        let majs = 0, ignores = 0;
+        const rejets: string[] = [];
+        const maintenant = new Date();
+        for (const [i, [brut, valeur]] of lignes.entries()) {
+          const code = (brut ?? "").trim().toUpperCase();
+          const prix = lireNombre(valeur);
+          const a = code ? await tx.article.findUnique({ where: { codeArticle: code } }) : null;
+          if (!a || !Number.isFinite(prix) || prix < 0) {
+            ignores++;
+            if (rejets.length < 50) rejets.push(`ligne ${i + 2} : ${!a ? `article inconnu ${code}` : "prix invalide"}`);
+            continue;
+          }
+          await tx.article.update({
+            where: { codeArticle: code },
+            data: { prixRevient: Math.round(prix * 1000) / 1000, dateMajPrix: maintenant, version: { increment: 1 }, modifiePar: u.login },
+          });
+          majs++;
+        }
+        const numero = await prochainNumero(tx, "IMPORT", "IMP");
+        await tx.importFichier.create({
+          data: { numero, type: "PRIX", nomFichier: nom, login: u.login, nbLignes: lignes.length, nbMisAJour: majs, nbIgnores: ignores, detail: rejets, creePar: u.login },
+        });
+        await auditer({ action: "IMPORT_PRIX_REVIENT", login: u.login, codeRole: u.role, entite: "ImportFichier", cleEntite: numero, apres: { fichier: nom, majs, ignores }, detail: rejets.join(" ; ") || undefined }, tx);
+        return { numero, majs, ignores };
+      },
+      { timeout: 120_000 },
+    );
+    revalidatePath("/catalogue");
+    return { ok: true, message: `${r.numero} : ${r.majs} prix mis à jour, ${r.ignores} ignorés.` };
+  } catch (e) {
+    journal.warn("Import des prix en échec", { erreur: e, login: u.login });
     return { ok: false, message: e instanceof Error ? e.message : "Fichier illisible." };
   }
 }

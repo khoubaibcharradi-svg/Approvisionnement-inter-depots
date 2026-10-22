@@ -1,7 +1,38 @@
 import { LIBELLES_NATURES, calculerCaisse, calculerRecette, calculerStock } from "@/lib/compte-rendu/calculs";
 import type { detailCompteRendu } from "@/lib/compte-rendu/service";
+import type { detailInventaire } from "@/lib/compte-rendu/inventaire";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof detailCompteRendu>>>;
+type LigneInventaire = Awaited<ReturnType<typeof detailInventaire>>[number];
+const qte = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
+
+function Inventaire({ lignes }: { lignes: LigneInventaire[] }) {
+  if (!lignes.length) return null;
+  const magasins = [...new Set(lignes.map((l) => l.magasin))];
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer font-medium text-marque">Détail de l&apos;inventaire en quantités ({lignes.length} ligne(s))</summary>
+      {magasins.map((m) => (
+        <div key={m} className="mt-2 overflow-x-auto">
+          <p className="font-medium">{m} · {lignes.find((l) => l.magasin === m)?.societe}</p>
+          <table className="tableau">
+            <thead><tr><th>Code</th><th>Désignation</th><th>Initial</th><th>Réceptions</th><th>Ventes</th><th>Retours</th><th>Théorique</th><th>Réel</th><th>Écart</th><th>Prix de revient</th><th>Écart (DT)</th></tr></thead>
+            <tbody>
+              {lignes.filter((l) => l.magasin === m).map((l) => (
+                <tr key={l.codeArticle} className={l.ecart !== 0 || l.stockFinalReel === null ? "bg-red-50" : ""}>
+                  <td className="font-mono text-xs">{l.codeArticle}</td><td>{l.designation}</td>
+                  {[l.stockInitial, l.receptions, l.ventes, l.retours, l.stockFinalTheorique, l.stockFinalReel, l.ecart].map((v, i) => <td key={i} className="text-right tabular-nums">{qte(v)}</td>)}
+                  <td className="text-right tabular-nums">{fmt(l.prixRevient)}</td>
+                  <td className="text-right tabular-nums">{fmt(Math.round(l.ecart * l.prixRevient * 1000) / 1000)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </details>
+  );
+}
 
 const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 3 }));
 const ecart = (n: number) => <td className={`text-right tabular-nums ${n === 0 ? "" : n < 0 ? "font-semibold text-red-700" : "font-semibold text-amber-700"}`}>{fmt(n)}</td>;
@@ -34,7 +65,7 @@ function Obs({ titre, texte }: { titre: string; texte: string }) {
 }
 
 /** Compte rendu journalier en lecture seule (administrateur et historique de l'agent). */
-export function VueCompteRendu({ cr, societes }: { cr: Detail; societes: Record<string, string> }) {
+export function VueCompteRendu({ cr, societes, inventaire = [] }: { cr: Detail; societes: Record<string, string>; inventaire?: LigneInventaire[] }) {
   const s = cr.saisie;
   const t = cr.totaux;
   return (
@@ -75,6 +106,7 @@ export function VueCompteRendu({ cr, societes }: { cr: Detail; societes: Record<
             </tbody>
           </table>
         </div>
+        <Inventaire lignes={inventaire} />
         <Obs titre="Justification des écarts" texte={s.justificationEcarts} />
         <Annexes cr={cr} rubrique="STOCK" titre="États de stock annexés" />
       </Bloc>

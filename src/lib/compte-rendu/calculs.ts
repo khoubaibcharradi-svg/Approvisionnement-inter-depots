@@ -236,3 +236,63 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
   }
   return e;
 }
+
+// ───────────────────────────── Inventaire en quantités ─────────────────────────────
+
+export type SaisieInventaire = {
+  codeArticle: string;
+  stockInitial: Montant;
+  receptions: Montant;
+  ventes: Montant;
+  retours: Montant;
+  /** Null tant que l'article n'a pas été compté. */
+  stockFinalReel: Montant;
+};
+
+/** Quantité théorique = initial + réceptions − ventes + retours ; écart = réel − théorique (null si non compté). */
+export function calculerLigneInventaire(l: SaisieInventaire) {
+  const theorique = mil(l.stockInitial) + mil(l.receptions) - mil(l.ventes) + mil(l.retours);
+  return { stockFinalTheorique: din(theorique), ecart: l.stockFinalReel === null ? null : din(mil(l.stockFinalReel) - theorique) };
+}
+
+/** Une ligne « concernée » a du stock ou un mouvement : elle doit alors être comptée. */
+export const ligneConcernee = (l: SaisieInventaire) =>
+  [l.stockInitial, l.receptions, l.ventes, l.retours].some((v) => (v ?? 0) !== 0) || l.stockFinalReel !== null;
+
+/**
+ * Valorisation au coût de revient (dinars) : chaque quantité × prix de revient unitaire, arrondie au millime.
+ * Un article non compté est valorisé à 0 en stock réel (l'écart fait alors apparaître le manque).
+ */
+export function valoriserInventaire(lignes: (SaisieInventaire & { prixRevient: number })[]) {
+  const t = { stockInitial: 0, receptions: 0, ventes: 0, retours: 0, stockFinalTheorique: 0, stockFinalReel: 0 };
+  for (const l of lignes) {
+    const v = (q: Montant) => Math.round((q ?? 0) * l.prixRevient * 1000);
+    t.stockInitial += v(l.stockInitial);
+    t.receptions += v(l.receptions);
+    t.ventes += v(l.ventes);
+    t.retours += v(l.retours);
+    t.stockFinalReel += v(l.stockFinalReel);
+  }
+  t.stockFinalTheorique = t.stockInitial + t.receptions - t.ventes + t.retours;
+  return {
+    stockInitial: din(t.stockInitial),
+    receptions: din(t.receptions),
+    ventes: din(t.ventes),
+    retours: din(t.retours),
+    stockFinalTheorique: din(t.stockFinalTheorique),
+    stockFinalReel: din(t.stockFinalReel),
+    ecart: din(t.stockFinalReel - t.stockFinalTheorique),
+  };
+}
+
+/** Contrôle de l'inventaire avant soumission du compte rendu. */
+export function controlerInventaire(lignes: SaisieInventaire[]) {
+  const e: string[] = [];
+  const negatifs = lignes.filter((l) => [l.stockInitial, l.receptions, l.ventes, l.retours, l.stockFinalReel].some((v) => v !== null && v < 0));
+  if (negatifs.length) e.push(`quantités négatives pour ${negatifs.map((l) => l.codeArticle).join(", ")}`);
+  const nonComptes = lignes.filter((l) => ligneConcernee(l) && l.stockFinalReel === null);
+  if (nonComptes.length) {
+    e.push(`stock final réel à saisir pour ${nonComptes.length} article(s) : ${nonComptes.slice(0, 8).map((l) => l.codeArticle).join(", ")}${nonComptes.length > 8 ? "…" : ""}`);
+  }
+  return e;
+}

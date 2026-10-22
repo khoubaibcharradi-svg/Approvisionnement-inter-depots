@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   calculerCaisse,
+  calculerLigneInventaire,
+  controlerInventaire,
+  valoriserInventaire,
   calculerDepenses,
   calculerRecette,
   calculerStock,
@@ -95,5 +98,26 @@ describe("complétude", () => {
     const s = complet();
     s.caisses[0].soldeReel = 10;
     expect(controlerCompletude(s, ok).join()).toMatch(/Espèces : justifier/);
+  });
+});
+
+
+describe("inventaire en quantités", () => {
+  const l = { codeArticle: "P101001", stockInitial: 100, receptions: 50, ventes: 30, retours: 2, stockFinalReel: 120 };
+  it("quantité théorique et écart", () => {
+    expect(calculerLigneInventaire(l)).toEqual({ stockFinalTheorique: 122, ecart: -2 });
+    expect(calculerLigneInventaire({ ...l, stockFinalReel: null }).ecart).toBeNull();
+  });
+  it("valorisation au prix de revient, au millime", () => {
+    const v = valoriserInventaire([
+      { ...l, prixRevient: 1.25 },
+      { codeArticle: "B101001", stockInitial: 10, receptions: 0, ventes: 1, retours: 0, stockFinalReel: 9, prixRevient: 3.333 },
+    ]);
+    expect(v).toEqual({ stockInitial: 158.33, receptions: 62.5, ventes: 40.833, retours: 2.5, stockFinalTheorique: 182.497, stockFinalReel: 179.997, ecart: -2.5 });
+  });
+  it("un article avec stock ou mouvement doit être compté", () => {
+    expect(controlerInventaire([{ ...l, stockFinalReel: null }]).join()).toMatch(/1 article/);
+    expect(controlerInventaire([{ codeArticle: "X", stockInitial: null, receptions: null, ventes: null, retours: null, stockFinalReel: null }])).toEqual([]);
+    expect(controlerInventaire([{ ...l, ventes: -1 }]).join()).toMatch(/négatives/);
   });
 });

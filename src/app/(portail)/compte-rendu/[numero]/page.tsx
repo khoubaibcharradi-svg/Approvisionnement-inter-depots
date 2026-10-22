@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auditer } from "@/lib/audit";
 import { ROLES } from "@/lib/constantes";
 import { detailCompteRendu } from "@/lib/compte-rendu/service";
+import { detailInventaire } from "@/lib/compte-rendu/inventaire";
 import { VueCompteRendu } from "@/components/vue-compte-rendu";
 
 export default async function PageCompteRenduAgent({ params }: { params: Promise<{ numero: string }> }) {
@@ -20,7 +21,7 @@ export default async function PageCompteRenduAgent({ params }: { params: Promise
   return (
     <div className="flex flex-col gap-3">
       <Link href="/compte-rendu/historique" className="note underline">← Historique</Link>
-      <VueCompteRendu cr={detail} societes={societes} />
+      <VueCompteRendu cr={detail} societes={societes} inventaire={await detailInventaire(detail.codeDepot, detail.dateJournee)} />
     </div>
   );
 }

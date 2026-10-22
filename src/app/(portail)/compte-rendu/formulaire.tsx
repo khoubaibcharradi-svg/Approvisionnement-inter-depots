@@ -65,6 +65,9 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
   const t = useMemo(() => totaux(s), [s]);
   const magasin = (code: string) => j.magasins.find((m) => m.code === code);
   const repriseMagasin = (code: string) => !!j.reprise?.magasins.includes(code);
+  /** Ligne calculée depuis l'inventaire en quantités : non saisissable ici. */
+  const parInventaire = (code: string) => j.inventaire.obligatoire || !!j.inventaire.etat[code];
+  const lienInventaire = (code: string) => `/compte-rendu/inventaire?date=${j.dateJournee}&magasin=${encodeURIComponent(code)}`;
 
   useEffect(() => {
     if (!modifie) return;
@@ -95,7 +98,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
     );
 
   const soumettre = async () => {
-    const manques = controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire });
+    const manques = [...j.inventaire.manques, ...controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire })];
     if (manques.length) {
       setMessage({ ok: false, texte: `Compte rendu incomplet :\n• ${manques.join("\n• ")}` });
       return;
@@ -142,6 +145,27 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
       )}
 
       <Section titre="Situation du stock au coût de revient (en dinars)">
+        {!lecture && s.stocks.length > 0 && s.stocks.some((l) => parInventaire(l.codeMagasin)) && (
+          <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            Cette situation est calculée automatiquement depuis l&apos;inventaire en quantités de chaque magasin, valorisé au coût de revient.
+            <ul className="mt-1 list-disc pl-5">
+              {s.stocks.map((l) => {
+                const e = j.inventaire.etat[l.codeMagasin];
+                const nom = magasin(l.codeMagasin)?.libelle ?? l.codeMagasin;
+                return (
+                  <li key={l.codeMagasin}>
+                    <a className="font-medium underline" href={lienInventaire(l.codeMagasin)}>{nom}</a> :{" "}
+                    {!e ? <span className="text-red-700">inventaire non saisi</span> : <>
+                      {e.nbLignes} article(s)
+                      {e.erreurs.length > 0 && <span className="text-red-700"> · {e.erreurs.join(" ; ")}</span>}
+                      {e.sansPrix > 0 && <span className="text-amber-700"> · {e.sansPrix} article(s) sans prix de revient (valorisés à 0)</span>}
+                    </>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {!s.stocks.length && <p className="alerte-erreur">Aucun magasin n&apos;est paramétré pour votre dépôt : contactez l&apos;administrateur.</p>}
         <div className="overflow-x-auto">
           <table className="tableau">
@@ -156,13 +180,16 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
                 const m = magasin(l.codeMagasin);
                 return (
                   <tr key={l.codeMagasin}>
-                    <td><b>{m?.societe}</b><div className="note text-xs">{m?.libelle ?? l.codeMagasin}</div></td>
-                    <td><Montant label="Stock initial" valeur={l.stockInitial} verrouille={lecture || repriseMagasin(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { stockInitial: v })} /></td>
-                    <td><Montant label="Réceptions" valeur={l.receptions} verrouille={lecture} onChange={(v) => majLigne("stocks", i, { receptions: v })} /></td>
-                    <td><Montant label="Ventes" valeur={l.ventes} verrouille={lecture} onChange={(v) => majLigne("stocks", i, { ventes: v })} /></td>
-                    <td><Montant label="Retours" valeur={l.retours} verrouille={lecture} onChange={(v) => majLigne("stocks", i, { retours: v })} /></td>
+                    <td>
+                      <b>{m?.societe}</b><div className="note text-xs">{m?.libelle ?? l.codeMagasin}</div>
+                      {!lecture && parInventaire(l.codeMagasin) && <a className="text-xs text-marque underline" href={lienInventaire(l.codeMagasin)}>Saisir l&apos;inventaire</a>}
+                    </td>
+                    <td><Montant label="Stock initial" valeur={l.stockInitial} verrouille={lecture || parInventaire(l.codeMagasin) || repriseMagasin(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { stockInitial: v })} /></td>
+                    <td><Montant label="Réceptions" valeur={l.receptions} verrouille={lecture || parInventaire(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { receptions: v })} /></td>
+                    <td><Montant label="Ventes" valeur={l.ventes} verrouille={lecture || parInventaire(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { ventes: v })} /></td>
+                    <td><Montant label="Retours" valeur={l.retours} verrouille={lecture || parInventaire(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { retours: v })} /></td>
                     <td className="text-right tabular-nums">{fmt(c.stockFinalTheorique)}</td>
-                    <td><Montant label="Stock final réel" valeur={l.stockFinalReel} verrouille={lecture} onChange={(v) => majLigne("stocks", i, { stockFinalReel: v })} /></td>
+                    <td><Montant label="Stock final réel" valeur={l.stockFinalReel} verrouille={lecture || parInventaire(l.codeMagasin)} onChange={(v) => majLigne("stocks", i, { stockFinalReel: v })} /></td>
                     <td className={`text-right tabular-nums ${classeEcart(c.ecart)}`}>{fmt(c.ecart)}</td>
                   </tr>
                 );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { importerCatalogue, importerStock, majArticle, type Resultat } from "./actions";
+import { importerCatalogue, importerPrix, importerStock, majArticle, type Resultat } from "./actions";
 
 type Article = {
   codeArticle: string;
@@ -13,17 +13,19 @@ type Article = {
   stockPieces?: number;
   quotaPieces?: number;
   rotation?: number | null;
+  prixRevient?: number;
 };
-type Droits = { code: boolean; logistique: boolean; quota: boolean };
+type Droits = { code: boolean; logistique: boolean; quota: boolean; prix: boolean };
 
 export function LigneArticle({ article: a, voitStock, droits }: { article: Article; voitStock: boolean; droits: Droits }) {
   const [code, setCode] = useState(a.codeArticle);
   const [pcb, setPcb] = useState(a.pcb ? String(a.pcb) : "");
   const [stock, setStock] = useState(String(a.stockPieces ?? ""));
   const [quota, setQuota] = useState(String(a.quotaPieces ?? ""));
+  const [prix, setPrix] = useState(String(a.prixRevient ?? ""));
   const [message, setMessage] = useState<Resultat | null>(null);
   const [enCours, demarrer] = useTransition();
-  const modifiable = droits.code || droits.logistique || droits.quota;
+  const modifiable = droits.code || droits.logistique || droits.quota || droits.prix;
 
   const enregistrer = (extra: Record<string, unknown> = {}) =>
     demarrer(async () => {
@@ -33,6 +35,7 @@ export function LigneArticle({ article: a, voitStock, droits }: { article: Artic
         ...(droits.code && code !== a.codeArticle ? { nouveauCode: code } : {}),
         ...(droits.logistique ? { pcb: pcb ? Number(pcb) : null, stockPieces: Number(stock) } : {}),
         ...(droits.quota ? { quotaPieces: Number(quota) } : {}),
+        ...(droits.prix && prix !== "" ? { prixRevient: Number(prix) } : {}),
         ...extra,
       });
       setMessage(r);
@@ -53,6 +56,7 @@ export function LigneArticle({ article: a, voitStock, droits }: { article: Artic
           <td>{a.rotation ?? "—"}</td>
           <td>{droits.logistique ? <input type="number" min={0} className="champ w-28" value={stock} onChange={(e) => setStock(e.target.value)} aria-label="Stock" /> : a.stockPieces}</td>
           <td>{droits.quota ? <input type="number" min={0} className="champ w-28" value={quota} onChange={(e) => setQuota(e.target.value)} aria-label="Quota" /> : a.quotaPieces}</td>
+          <td>{droits.prix ? <input type="number" min={0} step="0.001" className="champ w-28 text-right" value={prix} onChange={(e) => setPrix(e.target.value)} aria-label="Prix de revient" /> : <span className={a.prixRevient ? "" : "text-amber-700"}>{(a.prixRevient ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 3 })}</span>}</td>
         </>
       )}
       {modifiable && (
@@ -85,13 +89,17 @@ function FormulaireImport({ titre, aide, action }: { titre: string; aide: string
   );
 }
 
-export function Imports({ catalogue, stock }: { catalogue: boolean; stock: boolean }) {
-  if (!catalogue && !stock) return null;
+export function Imports({ catalogue, stock, prix }: { catalogue: boolean; stock: boolean; prix: boolean }) {
+  if (!catalogue && !stock && !prix) return null;
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {catalogue && (
         <FormulaireImport titre="Importer une liste d'articles (.xlsx / .csv)" action={importerCatalogue}
           aide="Colonnes : Code article, Désignation, Famille. Les codes existants sont mis à jour, les nouveaux ajoutés (stock et quota à 0)." />
+      )}
+      {prix && (
+        <FormulaireImport titre="Importer les prix de revient (.xlsx / .csv)" action={importerPrix}
+          aide="Colonnes : Code article, Prix de revient (dinars par pièce). Base de la valorisation des inventaires des dépôts." />
       )}
       {stock && (
         <FormulaireImport titre="Importer le stock ERP (.xlsx / .csv)" action={importerStock}

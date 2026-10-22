@@ -15,11 +15,12 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
     ...(p.inactifs ? {} : { isActif: true }),
     ...(q ? { OR: [{ codeArticle: { contains: q } }, { designation: { contains: q } }, { famille: { libelle: { contains: q } } }] } : {}),
   };
-  const [total, articles, sansPcb, majStock] = await Promise.all([
+  const [total, articles, sansPcb, majStock, sansPrix] = await Promise.all([
     prisma.article.count({ where }),
     prisma.article.findMany({ where, include: { famille: true }, orderBy: [{ codeFamille: "asc" }, { designation: "asc" }], skip: (page - 1) * TAILLE_PAGE, take: TAILLE_PAGE }),
     prisma.article.count({ where: { pcb: null, isActif: true } }),
     prisma.article.findFirst({ where: { dateMajStock: { not: null } }, orderBy: { dateMajStock: "desc" }, select: { dateMajStock: true, sourceStock: true } }),
+    prisma.article.count({ where: { prixRevient: 0, isActif: true } }),
   ]);
 
   const voitStock = ROLES_VOIENT_STOCK.includes(u.role);
@@ -27,6 +28,7 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
     code: u.role === ROLES.DIRECTEUR_COMMERCIAL || u.role === ROLES.ADMINISTRATEUR,
     logistique: u.role === ROLES.DIRECTEUR_LOGISTIQUE,
     quota: u.role === ROLES.DIRECTEUR_COMMERCIAL,
+    prix: u.role === ROLES.DIRECTEUR_LOGISTIQUE || u.role === ROLES.ADMINISTRATEUR,
   };
   const pages = Math.max(1, Math.ceil(total / TAILLE_PAGE));
   const lien = (n: number) => `/catalogue?${new URLSearchParams({ ...(q ? { q } : {}), ...(p.inactifs ? { inactifs: "1" } : {}), page: String(n) })}`;
@@ -40,10 +42,11 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
           <p className="note">Stock (dépôt central Radès) mis à jour le {majStock.dateMajStock.toLocaleString("fr-FR")} · source : {majStock.sourceStock}</p>
         )}
         {droits.logistique && sansPcb > 0 && <p className="alerte-erreur mt-2">PCB à renseigner pour {sansPcb} articles (1 pièce par carton en attendant).</p>}
+        {voitStock && sansPrix > 0 && <p className="note text-amber-700">{sansPrix} article(s) actif(s) sans prix de revient : ils sont valorisés à 0 dans les comptes rendus des dépôts.</p>}
         {voitStock && <p className="note">Stock et quota en pièces ; rotation en cartons par mois. Le quota ne peut pas dépasser le stock.</p>}
       </div>
 
-      <Imports catalogue={droits.code} stock={droits.logistique} />
+      <Imports catalogue={droits.code} stock={droits.logistique} prix={droits.prix} />
 
       <form className="flex flex-wrap gap-2">
         <input name="q" defaultValue={q} placeholder="Rechercher code, désignation, famille" className="champ min-w-72" />
@@ -58,8 +61,8 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
           <thead>
             <tr>
               <th>Code SKU</th><th>Désignation</th><th>Famille</th><th>Pièces / carton</th>
-              {voitStock && <><th>Rotation (crt/mois)</th><th>Stock (pièces)</th><th>Quota (pièces)</th></>}
-              {(droits.code || droits.logistique || droits.quota) && <th></th>}
+              {voitStock && <><th>Rotation (crt/mois)</th><th>Stock (pièces)</th><th>Quota (pièces)</th><th>Prix de revient (DT/pièce)</th></>}
+              {(droits.code || droits.logistique || droits.quota || droits.prix) && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -73,7 +76,7 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
                   pcb: a.pcb,
                   version: a.version,
                   isActif: a.isActif,
-                  ...(voitStock ? { stockPieces: a.stockPieces, quotaPieces: a.quotaPieces, rotation: a.rotationCartons?.toNumber() ?? null } : {}),
+                  ...(voitStock ? { stockPieces: a.stockPieces, quotaPieces: a.quotaPieces, rotation: a.rotationCartons?.toNumber() ?? null, prixRevient: a.prixRevient.toNumber() } : {}),
                 }}
                 voitStock={voitStock}
                 droits={droits}

@@ -125,6 +125,12 @@ Le module numérise le formulaire papier « Compte rendu journalier dépôt ».
   - écarts en rouge ;
   - alerte sur les dépôts sans compte rendu soumis la veille ;
   - détail complet et téléchargement des annexes.
+- **Inventaire en quantités** (menu « Inventaire » de l'agent) :
+  - une ligne par article de la table `article`, pour chaque magasin du dépôt, en pièces ;
+  - colonnes : société et magasin (grisés), code, désignation, stock initial, réceptions, ventes, retours, stock final théorique et stock final réel (saisie libre) ;
+  - le stock initial est le stock final réel du dernier inventaire du magasin, et il est verrouillé ;
+  - tout article avec du stock ou un mouvement doit être compté avant de soumettre le compte rendu.
+- **Situation du stock calculée** : avec `CR_INVENTAIRE_OBLIGATOIRE = 1` (valeur par défaut), chaque ligne du bloc « situation du stock » vaut la somme des quantités × prix de revient (`article.prixRevient`, en dinars par pièce). Le prix est saisi dans le catalogue ou importé par le Directeur logistique ou l'administrateur, et il est figé sur la ligne d'inventaire au moment de la saisie. Le détail de l'inventaire est consultable dans la fiche du compte rendu.
 - **Pièces jointes par rubrique** : états de stock (obligatoire), caisse recettes (bordereaux…) et caisse dépenses (justificatifs). Le fichier est envoyé dès qu'il est choisi. Les fichiers sont stockés dans `PIECES_DIR` (`./pieces-jointes`), avec leur empreinte SHA-256 en base. **Ce dossier doit être sauvegardé avec `backups/`** : la sauvegarde texte ne contient que la base.
 
 ## Structure
