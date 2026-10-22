@@ -5,6 +5,7 @@
   "description": "Portail d'approvisionnement commercial et de traçabilité inter-dépôts (Radès)",
   "scripts": {
     "postinstall": "prisma generate",
+    "predev": "prisma generate",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
