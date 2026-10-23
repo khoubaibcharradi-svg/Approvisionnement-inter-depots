@@ -31,6 +31,9 @@ const MODELES_SUPPRESSION_LOGIQUE = new Set([
   "CompteRenduCaisse",
   "CompteRenduDepense",
   "CompteRenduPiece",
+  "InventaireLigne",
+  "InventaireEtape",
+  "InventaireCode",
 ]);
 
 const LECTURES = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "aggregate", "groupBy"]);
