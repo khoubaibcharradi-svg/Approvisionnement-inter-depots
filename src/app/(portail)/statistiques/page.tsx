@@ -1,6 +1,7 @@
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { prisma, Prisma } from "@/lib/prisma";
-import { LIBELLES_STATUTS, ROLES } from "@/lib/constantes";
+import { ROLES } from "@/lib/constantes";
+import { listeLibelles } from "@/lib/referentiels";
 import { enPieces } from "@/lib/workflow";
 
 type Params = { canal?: string; depot?: string; du?: string; au?: string };
@@ -91,7 +92,7 @@ export default async function PageStatistiques({ searchParams }: { searchParams:
         ))}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <Barres titre="Demandes par statut" donnees={Object.entries(LIBELLES_STATUTS).map(([k, v]) => [v, nb(k)])} />
+        <Barres titre="Demandes par statut" donnees={(await listeLibelles("STATUT_DEMANDE")).map((s) => [s.libelle, nb(s.code)])} />
         <Barres titre="Quantités (pièces) par canal" donnees={grouper(lignes, (l) => l.d.canal.libelle, (l) => pieces(l.quantite, l))} />
         <Barres titre="Quantités (pièces) par dépôt" donnees={grouper(lignes, (l) => l.d.depot.libelle, (l) => pieces(l.quantite, l))} />
         <Barres titre="Quantités (pièces) par famille" donnees={grouper(lignes, (l) => l.article.famille.libelle, (l) => pieces(l.quantite, l))} />

@@ -140,6 +140,22 @@ Le module numérise le formulaire papier « Compte rendu journalier dépôt ».
 - **Situation du stock calculée** : avec `CR_INVENTAIRE_OBLIGATOIRE = 1` (valeur par défaut), chaque ligne du bloc « situation du stock » vaut la somme des quantités × prix de revient (`article.prixRevient`, en dinars par pièce). Le prix est saisi dans le catalogue ou importé par le Directeur logistique ou l'administrateur, et il est figé sur la ligne d'inventaire au moment de la saisie. Le détail de l'inventaire est consultable dans la fiche du compte rendu.
 - **Pièces jointes par rubrique** : états de stock (obligatoire), caisse recettes (bordereaux…) et caisse dépenses (justificatifs). Le fichier est envoyé dès qu'il est choisi. Les fichiers sont stockés dans `PIECES_DIR` (`./pieces-jointes`), avec leur empreinte SHA-256 en base. **Ce dossier doit être sauvegardé avec `backups/`** : la sauvegarde texte ne contient que la base.
 
+## Référentiels et libellés : tout est en base
+
+Aucun libellé ni aucune liste de référence n'est écrit dans le code : tout se modifie en base (phpMyAdmin), sans redéploiement.
+
+| Table | Contenu |
+|---|---|
+| `role` | Libellés et ordre des rôles ; `isActif = 0` retire un rôle de la liste d'attribution |
+| `libelle` | Par domaine : `STATUT_DEMANDE`, `GROUPE_STATUT` (colonne `valeur` = statuts du groupe), `ETAPE_DEMANDE`, `DECISION_DEPOT`, `UNITE`, `NATURE_CAISSE`, `ETAPE_INVENTAIRE`, `TEXTE` (textes du portail et de la page de connexion) |
+| `logo` | Logos (fichiers dans `public/logos`), hauteur et affichage sur la page de connexion |
+| `zone_carte` | Zones de la carte de connexion : libellé et codes ISO des gouvernorats (`TN-11,TN-12…`) |
+| `parametre` | Règles chiffrées et choix des logos (`LOGO_ESPACE_DEPOTS`, `LOGO_ESPACE_DEFAUT`) |
+| `societe`, `depot`, `magasin`, `canal`, `famille`, `article`, `vehicule` | Référentiels métier |
+
+Restent dans le code, volontairement : les **codes** (ex. `ADMINISTRATEUR`, `A_VALIDER`) et les **règles de droits** qui s'y rattachent ;
+ne jamais modifier une colonne `code`, seulement les libellés.
+
 ## Crédits
 
 Fond de carte de la page de connexion : [geoBoundaries](https://www.geoboundaries.org) (licence CC BY 4.0), tracés simplifiés.

@@ -60,7 +60,7 @@ describe("calculs", () => {
 });
 
 describe("complétude", () => {
-  const ok = { nbPieces: 1, pieceObligatoire: true };
+  const ok = { nbPieces: 1, pieceObligatoire: true, natures: { ESPECES: "Espèces", CHEQUES: "Chèques", TRAITES: "Traites", AUTRES: "Autres" } };
   it("un compte rendu complet passe", () => {
     expect(controlerCompletude(complet(), ok)).toEqual([]);
   });

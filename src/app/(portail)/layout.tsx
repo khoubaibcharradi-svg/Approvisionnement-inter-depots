@@ -2,8 +2,7 @@ import { exigerUtilisateur } from "@/lib/auth/session";
 import { ROLES, type CodeRole } from "@/lib/constantes";
 import { libellesRoles } from "@/lib/roles";
 import { Navigation, type EntreeMenu } from "./navigation";
-import logoNeolia from "../connexion/logos/logo-neolia.jpg";
-import logoPromofood from "../connexion/logos/logo-promofood.jpg";
+import { logo as chargerLogo, parametreTexte, textes } from "@/lib/referentiels";
 
 const MENU: (EntreeMenu & { roles?: CodeRole[]; saufRoles?: CodeRole[] })[] = [
   { href: "/demandes", libelle: "Demandes", icone: "demandes", section: "Approvisionnement", saufRoles: [ROLES.AGENT_DEPOT, ROLES.CONSULTANT_CR] },
@@ -24,20 +23,22 @@ const MENU: (EntreeMenu & { roles?: CodeRole[]; saufRoles?: CodeRole[] })[] = [
   { href: "/mot-de-passe", libelle: "Mon mot de passe", icone: "cle", section: "Mon compte" },
 ];
 
-/** Les dépôts sont exploités par Neolia Logistique : ses espaces (agents, consultation) en prennent la charte. */
+/** Espaces des dépôts (agents, consultation) : charte Neolia, logo choisi par le paramètre LOGO_ESPACE_DEPOTS. */
 const ROLES_NEOLIA: CodeRole[] = [ROLES.AGENT_DEPOT, ROLES.CONSULTANT_CR];
 
 export default async function LayoutPortail({ children }: { children: React.ReactNode }) {
   const u = await exigerUtilisateur(undefined, { tousRoles: true });
   const menu = MENU.filter((m) => (!m.roles || m.roles.includes(u.role)) && !m.saufRoles?.includes(u.role)).map(({ href, libelle, icone, section }) => ({ href, libelle, icone, section }));
   const neolia = ROLES_NEOLIA.includes(u.role);
-  const logo = neolia ? logoNeolia : logoPromofood;
+  const [t, logo] = await Promise.all([textes(), chargerLogo(await parametreTexte(neolia ? "LOGO_ESPACE_DEPOTS" : "LOGO_ESPACE_DEFAUT"))]);
   return (
     <div className={neolia ? "theme-neolia" : undefined}>
       <Navigation
         menu={menu}
         utilisateur={{ nom: u.nomComplet, role: (await libellesRoles())[u.role] }}
-        logo={{ src: logo.src, alt: neolia ? "Neolia Logistique" : "Promofood", largeur: logo.width, hauteur: logo.height }}
+        logo={logo ? { src: logo.chemin, alt: logo.libelle } : null}
+        nomPortail={t.NOM_PORTAIL}
+        sousTitre={t.SOUS_TITRE_PORTAIL}
       />
       <main className="lg:pl-64">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">{children}</div>

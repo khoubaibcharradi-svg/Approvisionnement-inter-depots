@@ -1,14 +1,20 @@
 import Link from "next/link";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { compterParStatut, listerDemandes } from "@/lib/demandes/lecture";
-import { GROUPES_STATUTS, LIBELLES_STATUTS, ROLES } from "@/lib/constantes";
+import { ROLES } from "@/lib/constantes";
+import type { StatutDemande } from "@prisma/client";
+import { libelles, listeLibelles } from "@/lib/referentiels";
 
 type Params = { groupe?: string; q?: string; page?: string; refus?: string; mdp?: string; ok?: string };
 
 export default async function PageDemandes({ searchParams }: { searchParams: Promise<Params> }) {
   const u = await exigerUtilisateur();
   const p = await searchParams;
-  const groupe = GROUPES_STATUTS.find((g) => g.titre === p.groupe);
+  const [groupes, statuts] = await Promise.all([
+    listeLibelles("GROUPE_STATUT").then((l) => l.map((g) => ({ code: g.code, titre: g.libelle, statuts: (g.valeur ?? "").split(",").filter(Boolean) as StatutDemande[] }))),
+    libelles("STATUT_DEMANDE"),
+  ]);
+  const groupe = groupes.find((g) => g.code === p.groupe);
   const [compteurs, liste] = await Promise.all([
     compterParStatut(u),
     listerDemandes(u, { statuts: groupe?.statuts, recherche: p.q, page: Number(p.page) || 1 }),
@@ -28,8 +34,8 @@ export default async function PageDemandes({ searchParams }: { searchParams: Pro
       {p.ok && <p className="alerte-ok">{p.ok}</p>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {GROUPES_STATUTS.map((g) => (
-          <Link key={g.titre} href={lien({ groupe: g.titre, page: undefined })} className={`carte text-center ${groupe?.titre === g.titre ? "ring-2 ring-marque" : ""}`}>
+        {groupes.map((g) => (
+          <Link key={g.code} href={lien({ groupe: g.code, page: undefined })} className={`carte text-center ${groupe?.code === g.code ? "ring-2 ring-marque" : ""}`}>
             <div className="text-2xl font-semibold">{total(g.statuts)}</div>
             <div className="note">{g.titre}</div>
           </Link>
@@ -60,7 +66,7 @@ export default async function PageDemandes({ searchParams }: { searchParams: Pro
             {liste.demandes.map((d) => (
               <tr key={d.numero}>
                 <td className="font-medium"><Link href={`/demandes/${d.numero}`} className="text-marque underline">{d.numero}</Link></td>
-                <td><span className="badge">{LIBELLES_STATUTS[d.statut]}</span></td>
+                <td><span className="badge">{statuts[d.statut]}</span></td>
                 <td>{d.canal.libelle}</td>
                 <td>{d.depot.libelle}</td>
                 <td>{d.saisiePar.nomComplet}</td>

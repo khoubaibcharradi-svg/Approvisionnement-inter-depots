@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { JourneeCompteRendu } from "@/lib/compte-rendu/service";
 import {
-  LIBELLES_NATURES,
   calculerCaisse,
   calculerDepenses,
   calculerRecette,
@@ -106,7 +105,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
     );
 
   const soumettre = async () => {
-    const manques = [...j.inventaire.manques, ...controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire })];
+    const manques = [...j.inventaire.manques, ...controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire, natures: j.libellesNatures })];
     if (manques.length) {
       setMessage({ ok: false, texte: `Compte rendu incomplet :\n• ${manques.join("\n• ")}` });
       return;
@@ -332,7 +331,7 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
                 return (
                   <tr key={c.nature}>
                     <td>
-                      <b>{LIBELLES_NATURES[c.nature]}</b>
+                      <b>{j.libellesNatures[c.nature] ?? c.nature}</b>
                       {c.nature === "AUTRES" && (
                         <input className="champ mt-1 w-32" placeholder="Préciser" value={c.precision} disabled={lecture} maxLength={100} aria-label="Préciser la nature" onChange={(e) => majLigne("caisses", i, { precision: e.target.value })} />
                       )}

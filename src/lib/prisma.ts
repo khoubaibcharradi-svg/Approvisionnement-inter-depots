@@ -34,6 +34,9 @@ const MODELES_SUPPRESSION_LOGIQUE = new Set([
   "InventaireLigne",
   "InventaireEtape",
   "InventaireCode",
+  "Libelle",
+  "Logo",
+  "ZoneCarte",
 ]);
 
 const LECTURES = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "aggregate", "groupBy"]);

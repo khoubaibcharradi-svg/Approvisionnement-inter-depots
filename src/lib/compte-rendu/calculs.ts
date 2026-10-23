@@ -6,12 +6,6 @@
 
 export const NATURES_CAISSE = ["ESPECES", "CHEQUES", "TRAITES", "AUTRES"] as const;
 export type NatureCaisse = (typeof NATURES_CAISSE)[number];
-export const LIBELLES_NATURES: Record<NatureCaisse, string> = {
-  ESPECES: "Espèces",
-  CHEQUES: "Chèques",
-  TRAITES: "Traites",
-  AUTRES: "Autres",
-};
 
 type Montant = number | null;
 
@@ -140,7 +134,8 @@ const montantValide = (v: Montant) => v !== null && Number.isFinite(v) && v >= 0
  * Contrôle de complétude avant soumission. Retourne la liste des manques (vide = complet).
  * Les champs texte obligatoires acceptent « RAS » quand il n'y a rien à signaler.
  */
-export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number; pieceObligatoire: boolean }) {
+/** `natures` : libellés des natures de caisse lus en base (domaine NATURE_CAISSE) ; à défaut, le code est affiché. */
+export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number; pieceObligatoire: boolean; natures?: Record<string, string> }) {
   const e: string[] = [];
 
   if (!s.stocks.length) e.push("Stock : aucun magasin n'est paramétré pour ce dépôt (contactez l'administrateur).");
@@ -192,7 +187,7 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
 
   for (const nature of NATURES_CAISSE) {
     const l = s.caisses.find((c) => c.nature === nature);
-    const lib = LIBELLES_NATURES[nature];
+    const lib = o.natures?.[nature] ?? nature;
     if (!l) {
       e.push(`Récapitulatif caisse : ligne ${lib} manquante.`);
       continue;
