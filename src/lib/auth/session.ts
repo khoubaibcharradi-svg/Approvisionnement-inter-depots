@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "../prisma";
 import { auditer } from "../audit";
-import { NOM_COOKIE, dureeSessionSecondes, lireJeton, signerJeton } from "./jeton";
+import { NOM_COOKIE, lireJeton, optionsCookie, signerJeton } from "./jeton";
 import { ROLES, ROLES_HORS_DEMANDES, accueilDuRole, type CodeRole } from "../constantes";
 import type { Acteur } from "../workflow";
 
@@ -18,14 +18,8 @@ export type UtilisateurCourant = Acteur & {
 };
 
 export async function ouvrirSession(login: string, versionSession: number) {
-  const jeton = await signerJeton({ login, vs: versionSession });
-  (await cookies()).set(NOM_COOKIE, jeton, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: dureeSessionSecondes(),
-  });
+  const jeton = await signerJeton({ login, vs: versionSession, debut: Math.floor(Date.now() / 1000) });
+  (await cookies()).set(NOM_COOKIE, jeton, optionsCookie());
 }
 
 export async function fermerSession() {

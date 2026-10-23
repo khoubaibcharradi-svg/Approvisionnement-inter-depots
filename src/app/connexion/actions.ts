@@ -16,7 +16,8 @@ export async function seConnecter(_: EtatConnexion, form: FormData): Promise<Eta
   if (!login || !motDePasse) return { erreur: "Identifiant et mot de passe obligatoires." };
 
   const u = await prisma.utilisateur.findUnique({ where: { login } });
-  const echec = async (detail: string, message = "Identifiant ou mot de passe incorrect.") => {
+  // Message identique dans tous les cas (inconnu, désactivé, verrouillé, mauvais mot de passe) : impossible de deviner les comptes.
+  const echec = async (detail: string, message = "Identifiant ou mot de passe incorrect. Après plusieurs échecs, le compte est verrouillé temporairement.") => {
     await auditer({ action: "CONNEXION_ECHEC", login, codeRole: u?.codeRole, entite: "Utilisateur", cleEntite: login, detail, succes: false });
     return { erreur: message };
   };
@@ -26,7 +27,8 @@ export async function seConnecter(_: EtatConnexion, form: FormData): Promise<Eta
     return echec(u ? "compte désactivé" : "identifiant inconnu");
   }
   if (u.verrouilleJusqua && u.verrouilleJusqua > new Date()) {
-    return echec("compte verrouillé", `Compte verrouillé jusqu'à ${u.verrouilleJusqua.toLocaleTimeString("fr-FR")} après plusieurs échecs.`);
+    await verificationFactice(motDePasse);
+    return echec(`compte verrouillé jusqu'à ${u.verrouilleJusqua.toISOString()}`);
   }
   if (!(await verifierMotDePasse(motDePasse, u.motDePasseHash))) {
     const max = await parametreNombre("MAX_ECHECS_CONNEXION");

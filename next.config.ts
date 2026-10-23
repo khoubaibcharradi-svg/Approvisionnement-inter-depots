@@ -2,24 +2,7 @@ import type { NextConfig } from "next";
 
 const production = process.env.NODE_ENV === "production";
 
-/**
- * Politique de sécurité du contenu : la page ne charge que des ressources du portail lui-même
- * (aucun script, style, image ou formulaire externe), ne peut pas être affichée dans un cadre
- * et n'envoie ses formulaires qu'au portail. 'unsafe-inline' reste nécessaire aux scripts
- * d'hydratation et aux styles de Next.js ; 'unsafe-eval' uniquement en développement.
- */
-const CSP = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self'${production ? "" : " ws: wss:"}`,
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+// La politique de sécurité du contenu (CSP) est posée par src/proxy.ts, avec un nonce par requête.
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -38,7 +21,6 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          { key: "Content-Security-Policy", value: CSP },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           // HTTPS obligatoire pour le navigateur pendant 1 an (production uniquement, le poste de dev est en HTTP)
           ...(production

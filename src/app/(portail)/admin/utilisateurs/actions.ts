@@ -32,6 +32,19 @@ async function depotAgent(s: z.infer<typeof fiche>) {
 }
 const affectations = z.array(z.object({ codeCanal: z.string().max(30), codeDepot: z.string().max(30).nullable() })).max(10);
 
+/**
+ * Anti-élévation de privilèges : seul un Administrateur IT peut attribuer le rôle ADMIN_FULL
+ * ou agir sur un compte ADMIN_FULL (modifier, réinitialiser, déverrouiller, désactiver, supprimer).
+ */
+async function protegerAdminIT(moi: { login: string; role: string }, cible: string, nouveauRole?: string) {
+  if (moi.role === ROLES.ADMIN_FULL) return;
+  const actuel = await prisma.utilisateur.findFirst({ where: { login: cible }, select: { codeRole: true } });
+  if (nouveauRole === ROLES.ADMIN_FULL || actuel?.codeRole === ROLES.ADMIN_FULL) {
+    await auditer({ action: "ELEVATION_PRIVILEGE_REFUSEE", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: cible, detail: nouveauRole ?? "action sur un compte ADMIN_FULL", succes: false });
+    throw new Error("Seul un Administrateur IT peut gérer les comptes Administrateur IT.");
+  }
+}
+
 async function admin() {
   return exigerUtilisateur([ROLES.ADMINISTRATEUR]);
 }
@@ -51,6 +64,7 @@ export async function creerUtilisateur(saisie: unknown): Promise<Resultat> {
   const moi = await admin();
   return executer(async () => {
     const s = fiche.parse(saisie);
+    await protegerAdminIT(moi, s.login, s.codeRole);
     // upsert : un compte supprimé logiquement avec le même login est recréé proprement.
     const existant = await prisma.utilisateur.findUnique({ where: { login: s.login } });
     if (existant) throw new Error(`L'identifiant ${s.login} existe déjà.`);
@@ -70,6 +84,7 @@ export async function majUtilisateur(saisie: unknown, aff: unknown): Promise<Res
   const moi = await admin();
   return executer(async () => {
     const s = fiche.parse(saisie);
+    await protegerAdminIT(moi, s.login, s.codeRole);
     const nouvelles = affectations.parse(aff);
     if (s.login === moi.login && s.codeRole !== moi.role) throw new Error("Vous ne pouvez pas retirer votre propre rôle d'administrateur.");
     if (s.codeRole === ROLES.SUPERVISEUR && nouvelles.some((a) => !a.codeDepot)) throw new Error("Un superviseur doit avoir un dépôt pour chaque canal.");
@@ -115,6 +130,7 @@ export async function reinitialiserMotDePasse(cible: string): Promise<Resultat> 
   const moi = await admin();
   return executer(async () => {
     const l = login.parse(cible);
+    await protegerAdminIT(moi, l);
     const temporaire = genererMotDePasseTemporaire();
     await prisma.utilisateur.update({
       where: { login: l },
@@ -129,6 +145,7 @@ export async function deverrouiller(cible: string): Promise<Resultat> {
   const moi = await admin();
   return executer(async () => {
     const l = login.parse(cible);
+    await protegerAdminIT(moi, l);
     await prisma.utilisateur.update({ where: { login: l }, data: { nbEchecsConnexion: 0, verrouilleJusqua: null, modifiePar: moi.login } });
     await auditer({ action: "COMPTE_DEVERROUILLE", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: l });
     return { ok: true, message: `Compte ${l} déverrouillé.` };
@@ -139,6 +156,7 @@ export async function basculerActif(cible: string): Promise<Resultat> {
   const moi = await admin();
   return executer(async () => {
     const l = login.parse(cible);
+    await protegerAdminIT(moi, l);
     if (l === moi.login) throw new Error("Vous ne pouvez pas désactiver votre propre compte.");
     const u = await prisma.utilisateur.findUniqueOrThrow({ where: { login: l } });
     await prisma.utilisateur.update({ where: { login: l }, data: { isActif: !u.isActif, versionSession: { increment: 1 }, modifiePar: moi.login } });
@@ -152,6 +170,7 @@ export async function supprimerUtilisateur(cible: string): Promise<Resultat> {
   const moi = await admin();
   return executer(async () => {
     const l = login.parse(cible);
+    await protegerAdminIT(moi, l);
     if (l === moi.login) throw new Error("Vous ne pouvez pas supprimer votre propre compte.");
     await prisma.$transaction(async (tx) => {
       await tx.affectation.updateMany({ where: { login: l }, data: champsSuppression(moi.login) });
