@@ -7,7 +7,8 @@ import { auditer } from "@/lib/audit";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { messagePublic } from "@/lib/erreurs";
 import { genererMotDePasseTemporaire, hacherMotDePasse } from "@/lib/auth/mot-de-passe";
-import { LIBELLES_ROLES, ROLES } from "@/lib/constantes";
+import { ROLES } from "@/lib/constantes";
+import { rolesAttribuables } from "@/lib/roles";
 
 export type Resultat = { ok: boolean; message: string; motDePasseTemporaire?: string };
 
@@ -16,12 +17,14 @@ const fiche = z.object({
   login,
   nomComplet: z.string().trim().min(2).max(100),
   email: z.email().max(150).or(z.literal("")).optional(),
-  codeRole: z.enum(Object.keys(LIBELLES_ROLES) as [string, ...string[]]),
+  codeRole: z.enum(Object.values(ROLES) as [string, ...string[]]),
   codeDepotAgent: z.string().max(30).nullish(),
 });
 
 /** Un agent dépôt doit être rattaché à un dépôt ; les autres rôles n'en ont pas. */
 async function depotAgent(s: z.infer<typeof fiche>) {
+  // Le rôle attribué doit exister et être actif dans la table role.
+  if (!(await rolesAttribuables()).some((r) => r.code === s.codeRole)) throw new Error("Rôle inconnu ou désactivé.");
   if (s.codeRole !== ROLES.AGENT_DEPOT) return null;
   if (!s.codeDepotAgent) throw new Error("Un agent dépôt doit être affecté à un dépôt.");
   if (!(await prisma.depot.findUnique({ where: { code: s.codeDepotAgent } }))) throw new Error("Dépôt inconnu.");

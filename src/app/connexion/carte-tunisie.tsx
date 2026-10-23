@@ -1,39 +1,66 @@
-import { TRACES } from "./carte-tunisie-traces";
+import { GOUVERNORATS } from "./carte-tunisie-traces";
 
-/** Zones couvertes : point d'ancrage dans la zone, position et alignement de l'étiquette. */
-const ZONES = [
-  { trace: TRACES.GRAND_TUNIS, nom: "Grand Tunis", point: [190, 62], ligne: [238, 14], texte: [243, 19], ancre: "start" },
-  { trace: TRACES.CAP_BON, nom: "Cap Bon", point: [234, 74], ligne: [300, 74], texte: [306, 80], ancre: "start" },
-  { trace: TRACES.SOUSSE, nom: "Sousse", point: [212, 145], ligne: [300, 145], texte: [306, 151], ancre: "start" },
-  { trace: TRACES.SFAX, nom: "Sfax", point: [212, 240], ligne: [300, 240], texte: [306, 246], ancre: "start" },
-  { trace: TRACES.JENDOUBA, nom: "Jendouba", point: [84, 82], ligne: [-6, 82], texte: [-12, 88], ancre: "end" },
-] as const;
+type Zone = { code: string; libelle: string; gouvernorats: string[] };
 
-export function CarteTunisie() {
+const ECART_MIN = 34; // espacement vertical minimal entre deux étiquettes d'un même côté
+const BORD_DROIT = 300;
+const BORD_GAUCHE = -6;
+
+/**
+ * Place les étiquettes des zones (lues en base) : à droite de la carte si la zone est à l'est, à gauche sinon,
+ * puis écarte verticalement celles qui se chevauchent.
+ */
+function etiquettes(zones: Zone[]) {
+  const placees = zones
+    .map((z) => {
+      const centres = z.gouvernorats.map((g) => GOUVERNORATS[g]).filter(Boolean);
+      if (!centres.length) return null;
+      const cx = centres.reduce((s, c) => s + c.cx, 0) / centres.length;
+      const cy = centres.reduce((s, c) => s + c.cy, 0) / centres.length;
+      return { ...z, cx, cy, ly: cy, droite: cx >= 120 };
+    })
+    .filter((z): z is NonNullable<typeof z> => z !== null);
+  for (const cote of [true, false]) {
+    const groupe = placees.filter((z) => z.droite === cote).sort((a, b) => a.cy - b.cy);
+    for (let i = 1; i < groupe.length; i++) {
+      if (groupe[i].ly - groupe[i - 1].ly < ECART_MIN) groupe[i].ly = groupe[i - 1].ly + ECART_MIN;
+    }
+    // Recentre le groupe sur la position moyenne d'origine pour limiter le décalage.
+    const decalage = groupe.reduce((s, z) => s + (z.ly - z.cy), 0) / (groupe.length || 1);
+    for (const z of groupe) z.ly = Math.max(14, z.ly - decalage / 2);
+  }
+  return placees;
+}
+
+export function CarteTunisie({ zones }: { zones: Zone[] }) {
+  const enEvidence = new Set(zones.flatMap((z) => z.gouvernorats));
+  const places = etiquettes(zones);
   return (
     <svg
       role="img"
-      aria-label={`Carte de la Tunisie : zones ${ZONES.map((z) => z.nom).join(", ")}`}
-      viewBox="-115 0 510 631"
+      aria-label={`Carte de la Tunisie : zones ${zones.map((z) => z.libelle).join(", ")}`}
+      viewBox="-125 0 560 631"
       className="mx-auto block h-auto w-full lg:h-full lg:w-auto lg:max-w-full"
     >
       {/* Crédit exigé par la licence CC BY 4.0 du fond de carte : affiché au survol de la carte. */}
       <title>Fond de carte : geoBoundaries (CC BY 4.0)</title>
       <g stroke="#ffffff" strokeWidth="1" strokeLinejoin="round">
-        <path fill="#cbd5e1" d={TRACES.AUTRES} />
-        {ZONES.map((z) => (
-          <path key={z.nom} className="fill-marque" d={z.trace} />
+        {Object.entries(GOUVERNORATS).map(([iso, g]) => (
+          <path key={iso} d={g.d} className={enEvidence.has(iso) ? "fill-marque" : undefined} fill={enEvidence.has(iso) ? undefined : "#cbd5e1"} />
         ))}
       </g>
-      {ZONES.map((z) => (
-        <g key={z.nom}>
-          <path d={`M${z.point[0]} ${z.point[1]} L${z.ligne[0]} ${z.ligne[1]}`} stroke="#334155" strokeWidth="1.2" fill="none" />
-          <circle cx={z.point[0]} cy={z.point[1]} r="4" fill="#ffffff" stroke="#334155" strokeWidth="1.5" />
-          <text x={z.texte[0]} y={z.texte[1]} textAnchor={z.ancre} fontSize="17" fontWeight="600" fill="#0f172a">
-            {z.nom}
-          </text>
-        </g>
-      ))}
+      {places.map((z) => {
+        const bord = z.droite ? BORD_DROIT : BORD_GAUCHE;
+        return (
+          <g key={z.code}>
+            <path d={`M${z.cx} ${z.cy} L${bord} ${z.ly}`} stroke="#334155" strokeWidth="1.2" fill="none" />
+            <circle cx={z.cx} cy={z.cy} r="4" fill="#ffffff" stroke="#334155" strokeWidth="1.5" />
+            <text x={z.droite ? bord + 6 : bord - 6} y={z.ly + 6} textAnchor={z.droite ? "start" : "end"} fontSize="17" fontWeight="600" fill="#0f172a">
+              {z.libelle}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 }

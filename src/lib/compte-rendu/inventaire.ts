@@ -7,6 +7,7 @@ import { ROLES } from "../constantes";
 import type { UtilisateurCourant } from "../auth/session";
 import { calculerLigneInventaire, controlerInventaire, ligneConcernee, valoriserInventaire, type SaisieInventaire } from "./calculs";
 import { ErreurCompteRendu, journeesAccessibles } from "./service";
+import { libelles } from "../referentiels";
 
 /**
  * Inventaire journalier en quantités, par magasin.
@@ -22,9 +23,11 @@ type Client = Transaction | typeof prisma;
 
 export const ETAPES = ["RECEPTIONS", "VENTES", "RETOURS"] as const satisfies readonly EtapeInventaire[];
 export const ETAPES_AVEC_CODES = ["RECEPTIONS", "RETOURS"] as const;
-export const LIBELLES_ETAPES: Record<EtapeInventaire, string> = { RECEPTIONS: "Réceptions", VENTES: "Ventes", RETOURS: "Retours" };
-/** Accord du participe : « réceptions validées », « retours validés ». */
-export const VALIDEES: Record<EtapeInventaire, string> = { RECEPTIONS: "validées", VENTES: "validées", RETOURS: "validés" };
+/** Libellés des étapes, lus en base (domaine ETAPE_INVENTAIRE). */
+export async function libellesEtapes(): Promise<Record<EtapeInventaire, string>> {
+  const l = await libelles("ETAPE_INVENTAIRE");
+  return { RECEPTIONS: l.RECEPTIONS, VENTES: l.VENTES, RETOURS: l.RETOURS };
+}
 const COLONNES_ETAPES = { RECEPTIONS: "receptions", VENTES: "ventes", RETOURS: "retours" } as const;
 
 const quantite = z.number().finite().min(0, "Quantités négatives interdites").max(1e9).nullable();
@@ -93,7 +96,7 @@ export async function chargerInventaire(agent: UtilisateurCourant, dateJournee: 
   });
   const magasin = magasins.find((m) => m.code === codeMagasinDemande) ?? magasins[0];
   const base = { dateJournee, datesAutorisees: dates, rouvertes, magasins: magasins.map((m) => ({ code: m.code, libelle: m.libelle, societe: m.societe.libelle })) };
-  if (!magasin) return { ...base, magasin: null, lignes: [], reprise: null, modifiable: false, compteRenduSoumis: false, entete: null, derniereSaisie: null, statuts: {} as Record<string, "EN_COURS" | "CLOTURE">, etapes: null };
+  if (!magasin) return { ...base, magasin: null, lignes: [], reprise: null, modifiable: false, compteRenduSoumis: false, entete: null, derniereSaisie: null, statuts: {} as Record<string, "EN_COURS" | "CLOTURE">, etapes: null, libellesEtapes: await libellesEtapes() };
 
   const [articles, existantes, precedent, soumis, en, statuts, etapes] = await Promise.all([
     prisma.article.findMany({ include: { famille: true }, orderBy: [{ codeFamille: "asc" }, { designation: "asc" }] }),
@@ -138,6 +141,7 @@ export async function chargerInventaire(agent: UtilisateurCourant, dateJournee: 
     derniereSaisie,
     statuts: Object.fromEntries(statuts.map((s) => [s.codeMagasin, s.statut])) as Record<string, "EN_COURS" | "CLOTURE">,
     etapes,
+    libellesEtapes: await libellesEtapes(),
   };
 }
 
@@ -187,6 +191,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
   const saisie = schemaInventaire.parse(brut);
   const action = schemaAction.parse(actionBrute);
   const codesSaisis = schemaCodes.parse(codesBruts);
+  const lib = await libellesEtapes();
   const normaliser = (l: string[]) => [...new Set(l.map((c) => c.replace(/\s+/g, " ").toUpperCase()))];
 
   return prisma.$transaction(
@@ -206,8 +211,8 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
       const avant = await etapesEtCodes(tx, codeMagasin, dateJournee);
       // Étapes figées pour cette action : celles validées, sauf celle dont on annule la validation.
       const figees = new Set(ETAPES.filter((e) => avant[e].validee && !(action.type === "ANNULER_VALIDATION" && action.etape === e)));
-      if (action.type === "VALIDER" && figees.has(action.etape)) throw new ErreurCompteRendu(`${LIBELLES_ETAPES[action.etape]} déjà ${VALIDEES[action.etape]}.`);
-      if (action.type === "ANNULER_VALIDATION" && !avant[action.etape].validee) throw new ErreurCompteRendu(`${LIBELLES_ETAPES[action.etape]} non ${VALIDEES[action.etape]}.`);
+      if (action.type === "VALIDER" && figees.has(action.etape)) throw new ErreurCompteRendu(`Étape « ${lib[action.etape]} » déjà validée.`);
+      if (action.type === "ANNULER_VALIDATION" && !avant[action.etape].validee) throw new ErreurCompteRendu(`Étape « ${lib[action.etape]} » non validée.`);
 
       const articles = new Map((await tx.article.findMany({ where: { codeArticle: { in: saisie.map((l) => l.codeArticle) } } })).map((a) => [a.codeArticle, a]));
       const precedent = await inventairePrecedent(tx, codeMagasin, dateJournee);
@@ -286,7 +291,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
       const erreurs = controlerInventaire(lignesGardees);
       if (action.type === "CLOTURER") {
         const manquantes = ETAPES.filter((e) => !avant[e].validee);
-        if (manquantes.length) throw new ErreurCompteRendu(`Clôture impossible : validez d'abord ${manquantes.map((e) => LIBELLES_ETAPES[e].toLowerCase()).join(", ")}.`);
+        if (manquantes.length) throw new ErreurCompteRendu(`Clôture impossible : validez d'abord ${manquantes.map((e) => `« ${lib[e]} »`).join(", ")}.`);
         if (!aGarder.length) throw new ErreurCompteRendu("Inventaire vide : saisissez au moins un article avant de clôturer.");
         if (erreurs.length) throw new ErreurCompteRendu(`Clôture impossible : ${erreurs.join(" ; ")}.`);
         await tx.inventaire.update({
@@ -314,7 +319,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
         },
         tx,
       );
-      return { articles: aGarder.length, erreurs, action: action.type, etape: "etape" in action ? action.etape : null, magasin: magasin.code, libelleMagasin: magasin.libelle };
+      return { articles: aGarder.length, erreurs, action: action.type, etape: "etape" in action ? action.etape : null, libelleEtape: "etape" in action ? lib[action.etape] : null, magasin: magasin.code, libelleMagasin: magasin.libelle };
     },
     { timeout: 60_000 },
   );
@@ -480,6 +485,7 @@ export async function detailInventaireAdmin(codeMagasin: string, dateJournee: st
     entete: vueEntete(en)!,
     compteRendu: cr,
     etapes: await etapesEtCodes(prisma, codeMagasin, dateJournee),
+    libellesEtapes: await libellesEtapes(),
     lignes: await lignesInventaire({ codeMagasin, dateJournee: enDate(dateJournee) }),
   };
 }

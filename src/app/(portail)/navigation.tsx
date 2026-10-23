@@ -10,7 +10,9 @@ export type EntreeMenu = { href: string; libelle: string; icone: NomIcone; secti
 type Props = {
   menu: EntreeMenu[];
   utilisateur: { nom: string; role: string };
-  logo: { src: string; alt: string; largeur: number; hauteur: number };
+  logo: { src: string; alt: string } | null;
+  nomPortail: string;
+  sousTitre: string;
 };
 
 /** Lien actif : l'entrée dont l'adresse est le plus long préfixe de la page courante. */
@@ -20,7 +22,7 @@ function actif(menu: EntreeMenu[], chemin: string) {
     .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 }
 
-function Contenu({ menu, utilisateur, logo, onNaviguer }: Props & { onNaviguer?: () => void }) {
+function Contenu({ menu, utilisateur, logo, nomPortail, sousTitre, onNaviguer }: Props & { onNaviguer?: () => void }) {
   const chemin = usePathname();
   const courant = actif(menu, chemin);
   const sections = [...new Set(menu.map((m) => m.section))];
@@ -28,12 +30,14 @@ function Contenu({ menu, utilisateur, logo, onNaviguer }: Props & { onNaviguer?:
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-col gap-3 px-5 pt-6 pb-4">
-        <div className="flex h-14 items-center justify-center rounded-xl bg-[#f7f7f7] px-3">
-          <img src={logo.src} alt={logo.alt} width={logo.largeur} height={logo.hauteur} className="h-9 w-auto" />
-        </div>
+        {logo && (
+          <div className="flex h-14 items-center justify-center rounded-xl bg-[#f7f7f7] px-3">
+            <img src={logo.src} alt={logo.alt} className="h-9 w-auto" />
+          </div>
+        )}
         <div className="px-1">
-          <p className="text-sm font-semibold text-slate-900">Approvisionnement</p>
-          <p className="text-xs text-slate-500">inter-dépôts · Radès</p>
+          <p className="text-sm font-semibold text-slate-900">{nomPortail}</p>
+          <p className="text-xs text-slate-500">{sousTitre}</p>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Navigation principale">
@@ -89,10 +93,12 @@ export function Navigation(props: Props) {
 
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur lg:hidden">
         <div className="flex items-center gap-2">
-          <span className="rounded-lg bg-[#f7f7f7] px-2 py-1">
-            <img src={props.logo.src} alt={props.logo.alt} width={props.logo.largeur} height={props.logo.hauteur} className="h-6 w-auto" />
-          </span>
-          <span className="text-sm font-semibold text-slate-900">Approvisionnement</span>
+          {props.logo && (
+            <span className="rounded-lg bg-[#f7f7f7] px-2 py-1">
+              <img src={props.logo.src} alt={props.logo.alt} className="h-6 w-auto" />
+            </span>
+          )}
+          <span className="text-sm font-semibold text-slate-900">{props.nomPortail}</span>
         </div>
         <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Ouvrir le menu" aria-expanded={ouvert} onClick={() => setOuvert(true)}>
           <Icone nom="menu" />

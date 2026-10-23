@@ -6,6 +6,7 @@ import { prochainNumero } from "../compteur";
 import { ROLES } from "../constantes";
 import type { UtilisateurCourant } from "../auth/session";
 import * as wf from "../workflow";
+import { libelles } from "../referentiels";
 
 /** Erreur fonctionnelle affichée telle quelle à l'utilisateur. `refus` = tentative hors droits (auditée). */
 export class ErreurMetier extends Error {
@@ -27,7 +28,6 @@ export type LigneModifiee = {
 
 const enDate = (s: string | null | undefined) => (s ? new Date(`${s}T00:00:00.000Z`) : null);
 const jour = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
-const UNITES: Record<Unite, string> = { PIECE: "pièce(s)", CARTON: "carton(s)" };
 
 async function chargerPourAction(tx: Transaction, numero: string) {
   const d = await tx.demande.findUnique({
@@ -415,11 +415,12 @@ export function deciderRades(acteur: UtilisateurCourant, numero: string, version
 
     const cibles = new Map(decision.lignes.map((l) => [l.numeroLigne, l]));
     const changements: string[] = [];
+    const unites = await libelles("UNITE");
     for (const l of d.lignes) {
       const c = cibles.get(l.numeroLigne);
       if (!c) continue;
       controlerQuantite(c.quantite);
-      if (c.quantite !== l.quantite) changements.push(`${l.codeArticle} qté ${l.quantite}→${c.quantite} ${UNITES[l.unite]}`);
+      if (c.quantite !== l.quantite) changements.push(`${l.codeArticle} qté ${l.quantite}→${c.quantite} ${unites[l.unite]}`);
       if ((c.dateExpeditionPrevue || null) !== jour(l.dateExpeditionPrevue)) {
         changements.push(`${l.codeArticle} expédition ${c.dateExpeditionPrevue || "—"}`);
       }

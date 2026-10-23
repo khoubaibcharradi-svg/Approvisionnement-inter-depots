@@ -11,10 +11,11 @@ type Etape = "RECEPTIONS" | "VENTES" | "RETOURS";
 type EtapeAvecCodes = Exclude<Etape, "VENTES">;
 type Colonne = "receptions" | "ventes" | "retours" | "stockFinalReel";
 type Vue = "tous" | "concernes" | "aCompter";
-const ETAPES: { etape: Etape; colonne: Exclude<Colonne, "stockFinalReel">; libelle: string; validees: string; codes: string | null }[] = [
-  { etape: "RECEPTIONS", colonne: "receptions", libelle: "Réceptions", validees: "Validées", codes: "N° de bon de réception" },
-  { etape: "VENTES", colonne: "ventes", libelle: "Ventes", validees: "Validées", codes: null },
-  { etape: "RETOURS", colonne: "retours", libelle: "Retours", validees: "Validés", codes: "N° de bon de retour" },
+/** Structure des étapes (codes, colonne, codes de bons exigés) ; les libellés viennent de la base. */
+const STRUCTURE_ETAPES: { etape: Etape; colonne: Exclude<Colonne, "stockFinalReel">; avecCodes: boolean }[] = [
+  { etape: "RECEPTIONS", colonne: "receptions", avecCodes: true },
+  { etape: "VENTES", colonne: "ventes", avecCodes: false },
+  { etape: "RETOURS", colonne: "retours", avecCodes: true },
 ];
 const TOUTES = "";
 const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
@@ -83,6 +84,10 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const lecture = !inv.modifiable;
   const m = inv.magasin!;
   const validee = (e: Etape) => inv.etapes?.[e].validee ?? null;
+  const ETAPES = STRUCTURE_ETAPES.map((e) => {
+    const libelle = inv.libellesEtapes[e.etape];
+    return { ...e, libelle, codes: e.avecCodes ? `N° de bon (${libelle})` : null };
+  });
 
   const nomMagasin = `${m.societe} · ${m.libelle}`;
 
@@ -142,7 +147,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const nbACompter = lignes.filter(aCompter).length;
   const nonValidees = ETAPES.filter((e) => !validee(e.etape));
   const raisonBlocage = nonValidees.length
-    ? `validez d'abord ${nonValidees.map((e) => e.libelle.toLowerCase()).join(", ")}`
+    ? `validez d'abord ${nonValidees.map((e) => `« ${e.libelle} »`).join(", ")}`
     : erreurs.length ? "saisissez le stock final réel de tous les articles concernés" : concernees === 0 ? "aucun article saisi" : null;
 
   const envoyer = (action: ActionInventaire, confirmation?: string) =>
@@ -179,7 +184,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const progression = ((nbValidees + (cloture ? 1 : 0)) / (ETAPES.length + 1)) * 100;
 
   /** Carte d'une étape : numéro, état, codes éventuels et action. */
-  const carteEtape = ({ etape, colonne, libelle, validees, codes: libelleCodes }: (typeof ETAPES)[number], numero: number) => {
+  const carteEtape = ({ etape, colonne, libelle, codes: libelleCodes }: (typeof ETAPES)[number], numero: number) => {
     const v = validee(etape);
     const total = lignes.reduce((t, l) => t + (l[colonne] ?? 0), 0);
     return (
@@ -191,7 +196,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           <div className="min-w-0">
             <p className="font-semibold text-slate-900">{libelle}</p>
             {v ? (
-              <p className="text-xs text-emerald-800">{validees} par {v.login} à {heure(v.date)}</p>
+              <p className="text-xs text-emerald-800">Validée par {v.login} à {heure(v.date)}</p>
             ) : (
               <p className="text-xs text-amber-700">À valider · {fmt(total)} pièce(s) saisie(s)</p>
             )}
@@ -202,12 +207,12 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           <div className="mt-auto">
             {v ? (
               <button type="button" className="btn-secondaire w-full" disabled={enCours}
-                onClick={() => envoyer({ type: "ANNULER_VALIDATION", etape }, `Modifier les ${libelle.toLowerCase()} ? La colonne redevient modifiable et devra être validée de nouveau.`)}>
+                onClick={() => envoyer({ type: "ANNULER_VALIDATION", etape }, `Modifier l'étape « ${libelle} » ? La colonne redevient modifiable et devra être validée de nouveau.`)}>
                 Modifier
               </button>
             ) : (
-              <button type="button" className="btn w-full" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape }, `Valider les ${libelle.toLowerCase()} de ${nomMagasin} (${fmt(total)} pièce(s)) ?`)}>
-                Valider les {libelle.toLowerCase()}
+              <button type="button" className="btn w-full" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape }, `Valider l'étape « ${libelle} » de ${nomMagasin} (${fmt(total)} pièce(s)) ?`)}>
+                Valider · {libelle}
               </button>
             )}
           </div>
@@ -316,7 +321,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           <thead className="sticky top-0 z-10">
             <tr>
               <th>Société / magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th>
-              {ETAPES.map((e) => <th key={e.etape}>{e.libelle}{validee(e.etape) && <span className="ml-1 text-emerald-600" title="Validées : colonne figée">✓</span>}</th>)}
+              {ETAPES.map((e) => <th key={e.etape}>{e.libelle}{validee(e.etape) && <span className="ml-1 text-emerald-600" title="Étape validée : colonne figée">✓</span>}</th>)}
               <th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
             </tr>
           </thead>
