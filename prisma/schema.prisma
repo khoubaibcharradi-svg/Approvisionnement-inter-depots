@@ -76,6 +76,13 @@ enum StatutInventaire {
   CLOTURE
 }
 
+/// Étapes de l'inventaire validées une à une par l'agent avant la clôture.
+enum EtapeInventaire {
+  RECEPTIONS
+  VENTES
+  RETOURS
+}
+
 enum NatureCaisse {
   ESPECES
   CHEQUES
@@ -462,6 +469,8 @@ model Inventaire {
   magasin      Magasin                 @relation(fields: [codeMagasin], references: [code], onUpdate: Cascade, onDelete: Restrict)
   lignes       InventaireLigne[]
   reouvertures InventaireReouverture[]
+  etapes       InventaireEtape[]
+  codes        InventaireCode[]
 
   @@id([codeMagasin, dateJournee])
   @@index([codeDepot, dateJournee])
@@ -482,6 +491,51 @@ model InventaireReouverture {
 
   @@id([codeMagasin, dateJournee, numero])
   @@map("inventaire_reouverture")
+}
+
+/// Validation d'une étape (réceptions, ventes, retours) : la colonne correspondante est alors figée.
+/// Annuler la validation (avant clôture) passe la ligne en suppression logique ; revalider la réactive.
+model InventaireEtape {
+  codeMagasin      String          @db.VarChar(30)
+  dateJournee      DateTime        @db.Date
+  etape            EtapeInventaire
+  dateValidation   DateTime        @default(now()) @db.DateTime(3)
+  loginValidation  String          @db.VarChar(50)
+  isActif          Boolean         @default(true)
+  isDeleted        Boolean         @default(false)
+  dateCreation     DateTime        @default(now())
+  creePar          String?         @db.VarChar(50)
+  dateModification DateTime        @updatedAt
+  modifiePar       String?         @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?         @db.VarChar(50)
+
+  inventaire Inventaire @relation(fields: [codeMagasin, dateJournee], references: [codeMagasin, dateJournee], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([codeMagasin, dateJournee, etape])
+  @@map("inventaire_etape")
+}
+
+/// Codes saisis par l'agent pour justifier une étape (bons de réception, bons de retour…) : plusieurs par étape.
+model InventaireCode {
+  codeMagasin      String          @db.VarChar(30)
+  dateJournee      DateTime        @db.Date
+  etape            EtapeInventaire
+  code             String          @db.VarChar(50)
+  isActif          Boolean         @default(true)
+  isDeleted        Boolean         @default(false)
+  dateCreation     DateTime        @default(now())
+  creePar          String?         @db.VarChar(50)
+  dateModification DateTime        @updatedAt
+  modifiePar       String?         @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?         @db.VarChar(50)
+
+  inventaire Inventaire @relation(fields: [codeMagasin, dateJournee], references: [codeMagasin, dateJournee], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([codeMagasin, dateJournee, etape, code])
+  @@index([code])
+  @@map("inventaire_code")
 }
 
 /// Inventaire journalier en quantités (pièces) : une ligne par magasin, journée et article.

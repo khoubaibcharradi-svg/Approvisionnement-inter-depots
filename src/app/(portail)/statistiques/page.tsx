@@ -72,7 +72,7 @@ export default async function PageStatistiques({ searchParams }: { searchParams:
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Statistiques</h1>
+      <h1 className="titre-page">Statistiques</h1>
       <form className="carte flex flex-wrap items-end gap-2">
         <label className="etiquette">Canal
           <select name="canal" defaultValue={p.canal} className="champ"><option value="">Tous</option>{canaux.map((c) => <option key={c.code} value={c.code}>{c.libelle}</option>)}</select>

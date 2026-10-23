@@ -53,7 +53,11 @@ export async function seConnecter(_: EtatConnexion, form: FormData): Promise<Eta
 
 export async function seDeconnecter() {
   const u = await utilisateurCourant();
-  if (u) await auditer({ action: "DECONNEXION", login: u.login, codeRole: u.role, entite: "Utilisateur", cleEntite: u.login });
+  if (u) {
+    // Un jeton copié avant la déconnexion devient inutilisable (versionSession).
+    await prisma.utilisateur.update({ where: { login: u.login }, data: { versionSession: { increment: 1 } } });
+    await auditer({ action: "DECONNEXION", login: u.login, codeRole: u.role, entite: "Utilisateur", cleEntite: u.login });
+  }
   await fermerSession();
   redirect("/connexion");
 }

@@ -38,7 +38,7 @@ export default async function PageDemandes({ searchParams }: { searchParams: Pro
 
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold">Demandes{groupe ? ` · ${groupe.titre}` : ""}</h1>
+          <h1 className="titre-page">Demandes{groupe ? ` · ${groupe.titre}` : ""}</h1>
           <p className="note">{portee} · {liste.total} demande(s)</p>
         </div>
         <form className="flex gap-2">

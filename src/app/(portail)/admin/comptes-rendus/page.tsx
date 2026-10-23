@@ -1,19 +1,20 @@
 import Link from "next/link";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
-import { ROLES } from "@/lib/constantes";
+import { ROLES, ROLES_LECTURE_COMPTES_RENDUS } from "@/lib/constantes";
 import { filtreCompteRendu, type FiltresCompteRendu } from "@/lib/compte-rendu/service";
 
 const TAILLE_PAGE = 50;
 const fmt = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-export default async function PageComptesRendus({ searchParams }: { searchParams: Promise<FiltresCompteRendu & { page?: string }> }) {
-  await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+export default async function PageComptesRendus({ searchParams }: { searchParams: Promise<FiltresCompteRendu & { page?: string; refus?: string; mdp?: string }> }) {
+  await exigerUtilisateur(ROLES_LECTURE_COMPTES_RENDUS);
   const p = await searchParams;
   // Par défaut : les 7 derniers jours.
   const auj = new Date();
   const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const f: FiltresCompteRendu = { ...p, du: p.du ?? iso(new Date(auj.getTime() - 6 * 86_400_000)), au: p.au ?? iso(auj) };
+  const { refus: _refus, mdp: _mdp, ...filtres } = p;
+  const f: FiltresCompteRendu = { ...filtres, du: p.du ?? iso(new Date(auj.getTime() - 6 * 86_400_000)), au: p.au ?? iso(auj) };
   const page = Math.max(1, Number(p.page) || 1);
   const where = filtreCompteRendu(f);
 
@@ -52,8 +53,10 @@ export default async function PageComptesRendus({ searchParams }: { searchParams
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Comptes rendus journaliers des dépôts</h1>
-      <form className="carte grid gap-3 sm:grid-cols-3 lg:grid-cols-7 lg:items-end">
+      {p.mdp && <p className="alerte-ok">Mot de passe modifié.</p>}
+      {p.refus && <p className="alerte-erreur">Accès refusé : cette page n&apos;est pas ouverte à votre profil.</p>}
+      <h1 className="titre-page">Comptes rendus journaliers des dépôts</h1>
+      <form className="carte grid gap-3 sm:grid-cols-3 lg:grid-cols-6 lg:items-end">
         <label className="etiquette">Date début<input type="date" name="du" defaultValue={f.du} className="champ" /></label>
         <label className="etiquette">Date fin<input type="date" name="au" defaultValue={f.au} className="champ" /></label>
         <label className="etiquette">Dépôt
@@ -68,7 +71,7 @@ export default async function PageComptesRendus({ searchParams }: { searchParams
         <label className="etiquette">Statut
           <select name="statut" defaultValue={f.statut} className="champ"><option value="">Tous</option><option value="SOUMIS">Soumis</option><option value="BROUILLON">Brouillon</option></select>
         </label>
-        <div className="flex gap-2"><button className="btn">Filtrer</button><Link href="/admin/comptes-rendus" className="btn-secondaire">Réinitialiser</Link></div>
+        <div className="flex gap-2 sm:col-span-3 lg:col-span-6 lg:justify-end"><button className="btn">Filtrer</button><Link href="/admin/comptes-rendus" className="btn-secondaire">Réinitialiser</Link></div>
       </form>
 
       {sansCompteRendu.length > 0 && (

@@ -36,7 +36,7 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">Catalogue SKU ({total} articles)</h1>
+        <h1 className="titre-page">Catalogue SKU ({total} articles)</h1>
         {!droits.code && <p className="note">🔒 Codes SKU en lecture seule pour votre profil.</p>}
         {voitStock && majStock?.dateMajStock && (
           <p className="note">Stock (dépôt central Radès) mis à jour le {majStock.dateMajStock.toLocaleString("fr-FR")} · source : {majStock.sourceStock}</p>

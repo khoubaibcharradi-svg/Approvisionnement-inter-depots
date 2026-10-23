@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { auditer } from "@/lib/audit";
-import { ROLES } from "@/lib/constantes";
+import { ROLES_LECTURE_COMPTES_RENDUS } from "@/lib/constantes";
 import { detailCompteRendu } from "@/lib/compte-rendu/service";
 import { detailInventaire } from "@/lib/compte-rendu/inventaire";
 import { VueCompteRendu } from "@/components/vue-compte-rendu";
 
 export default async function PageDetailCompteRendu({ params }: { params: Promise<{ numero: string }> }) {
-  const u = await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+  const u = await exigerUtilisateur(ROLES_LECTURE_COMPTES_RENDUS);
   const { numero } = await params;
   const cr = await detailCompteRendu(numero.slice(0, 20));
   if (!cr) notFound();

@@ -22,7 +22,7 @@ export default async function PageUtilisateurs() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">Utilisateurs ({utilisateurs.length})</h1>
+        <h1 className="titre-page">Utilisateurs ({utilisateurs.length})</h1>
         <p className="note">Mots de passe hachés (bcrypt) : un mot de passe temporaire est affiché une seule fois à la création ou à la réinitialisation, et doit être changé à la première connexion.</p>
       </div>
       <NouvelUtilisateur reference={ref} />
