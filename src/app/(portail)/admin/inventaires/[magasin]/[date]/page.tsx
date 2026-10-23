@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { auditer } from "@/lib/audit";
 import { ROLES } from "@/lib/constantes";
-import { detailInventaireAdmin } from "@/lib/compte-rendu/inventaire";
+import { detailInventaireAdmin, ETAPES, LIBELLES_ETAPES, VALIDEES } from "@/lib/compte-rendu/inventaire";
 import { FormulaireReouverture } from "./reouverture";
 
 const qte = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
@@ -32,6 +32,21 @@ export default async function PageDetailInventaire({ params }: { params: Promise
           </p>
         </div>
         <span className={`badge ${e.statut === "CLOTURE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{e.statut === "CLOTURE" ? "🔒 Clôturé" : "En cours"}</span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {ETAPES.map((etape) => {
+          const s = inv.etapes[etape];
+          return (
+            <div key={etape} className={`carte flex flex-col gap-1 text-sm ${s.validee ? "" : "border-amber-200 bg-amber-50"}`}>
+              <b>{LIBELLES_ETAPES[etape]}</b>
+              <span className={s.validee ? "text-emerald-800" : "text-amber-800"}>
+                {s.validee ? `✓ ${VALIDEES[etape]} par ${s.validee.login} le ${s.validee.date.toLocaleString("fr-FR")}` : `Non ${VALIDEES[etape]}`}
+              </span>
+              {etape !== "VENTES" && <span>Codes : {s.codes.length ? <span className="font-mono">{s.codes.join(", ")}</span> : <span className="note">aucun</span>}</span>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="carte overflow-x-auto p-0">

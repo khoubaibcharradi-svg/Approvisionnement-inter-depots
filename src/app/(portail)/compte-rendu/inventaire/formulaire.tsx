@@ -2,16 +2,23 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { InventaireJournee } from "@/lib/compte-rendu/inventaire";
+import type { ActionInventaire, InventaireJournee } from "@/lib/compte-rendu/inventaire";
 import { calculerLigneInventaire, controlerInventaire, ligneConcernee } from "@/lib/compte-rendu/calculs";
 import { enregistrerInventaire } from "./actions";
 
 type Ligne = InventaireJournee["lignes"][number];
+type Etape = "RECEPTIONS" | "VENTES" | "RETOURS";
+type EtapeAvecCodes = Exclude<Etape, "VENTES">;
 type Colonne = "receptions" | "ventes" | "retours" | "stockFinalReel";
 type Vue = "tous" | "concernes" | "aCompter";
-const MOUVEMENTS = ["receptions", "ventes", "retours"] as const;
+const ETAPES: { etape: Etape; colonne: Exclude<Colonne, "stockFinalReel">; libelle: string; validees: string; codes: string | null }[] = [
+  { etape: "RECEPTIONS", colonne: "receptions", libelle: "Réceptions", validees: "Validées", codes: "N° de bon de réception" },
+  { etape: "VENTES", colonne: "ventes", libelle: "Ventes", validees: "Validées", codes: null },
+  { etape: "RETOURS", colonne: "retours", libelle: "Retours", validees: "Validés", codes: "N° de bon de retour" },
+];
 const TOUTES = "";
 const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
+const heure = (d: Date | string) => new Date(d).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 const aCompter = (l: Ligne) => ligneConcernee(l) && l.stockFinalReel === null;
 
 /** Entrée : passe à la même colonne de la ligne suivante, comme dans un tableur. */
@@ -31,19 +38,51 @@ function Quantite({ valeur, onChange, verrouille, label, colonne }: { valeur: nu
   );
 }
 
+/** Saisie de plusieurs codes : Entrée ou « + » ajoute, × retire. */
+function Codes({ codes, onChange, verrouille, libelle }: { codes: string[]; onChange: (c: string[]) => void; verrouille: boolean; libelle: string }) {
+  const [saisie, setSaisie] = useState("");
+  const ajouter = () => {
+    const c = saisie.trim().replace(/\s+/g, " ").toUpperCase();
+    if (c && !codes.includes(c)) onChange([...codes, c]);
+    setSaisie("");
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      {codes.length > 0 && (
+        <ul className="flex flex-wrap gap-1" aria-label={libelle}>
+          {codes.map((c) => (
+            <li key={c} className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 font-mono text-xs text-slate-800 ring-1 ring-slate-300">
+              {c}
+              {!verrouille && <button type="button" aria-label={`Retirer ${c}`} className="text-slate-500 hover:text-red-700" onClick={() => onChange(codes.filter((x) => x !== c))}>×</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!verrouille && (
+        <div className="flex gap-1">
+          <input className="champ w-full min-w-0 py-1 text-xs font-normal" placeholder={libelle} aria-label={libelle} maxLength={50} value={saisie}
+            onChange={(e) => setSaisie(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); ajouter(); } }} />
+          <button type="button" className="btn-secondaire px-2 py-1 text-xs" aria-label={`Ajouter ${libelle}`} onClick={ajouter}>+</button>
+        </div>
+      )}
+      {verrouille && !codes.length && <span className="text-xs font-normal text-slate-500">Aucun code</span>}
+    </div>
+  );
+}
+
 export function FormulaireInventaire({ inventaire: inv }: { inventaire: InventaireJournee }) {
   const router = useRouter();
   const [lignes, setLignes] = useState<Ligne[]>(inv.lignes);
+  const [codes, setCodes] = useState<Record<EtapeAvecCodes, string[]>>({ RECEPTIONS: inv.etapes?.RECEPTIONS.codes ?? [], RETOURS: inv.etapes?.RETOURS.codes ?? [] });
   const [filtre, setFiltre] = useState("");
   const [famille, setFamille] = useState(TOUTES);
   const [vue, setVue] = useState<Vue>("tous");
   const [modifie, setModifie] = useState(false);
-  // Réceptions / ventes / retours modifiés depuis le dernier enregistrement : la clôture attend leur enregistrement.
-  const [mouvementsModifies, setMouvementsModifies] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
   const [enCours, demarrer] = useTransition();
   const lecture = !inv.modifiable;
   const m = inv.magasin!;
+  const validee = (e: Etape) => inv.etapes?.[e].validee ?? null;
 
   useEffect(() => {
     if (!modifie) return;
@@ -55,7 +94,10 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const maj = (code: string, colonne: Colonne, v: number | null) => {
     setLignes((ls) => ls.map((l) => (l.codeArticle === code ? { ...l, [colonne]: v } : l)));
     setModifie(true);
-    if (colonne !== "stockFinalReel") setMouvementsModifies(true);
+  };
+  const majCodes = (e: EtapeAvecCodes, c: string[]) => {
+    setCodes((x) => ({ ...x, [e]: c }));
+    setModifie(true);
   };
 
   const familles = useMemo(() => {
@@ -82,27 +124,25 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const erreurs = controlerInventaire(lignes);
   const concernees = lignes.filter(ligneConcernee).length;
   const nbACompter = lignes.filter(aCompter).length;
-  const jamaisEnregistre = !inv.entete;
-  const clotureBloquee = enCours || jamaisEnregistre || mouvementsModifies || erreurs.length > 0 || concernees === 0;
-  const raisonBlocage = jamaisEnregistre || mouvementsModifies
-    ? "Enregistrez d'abord les réceptions, ventes et retours"
-    : erreurs.length ? "Saisissez le stock final réel de tous les articles concernés" : undefined;
+  const nonValidees = ETAPES.filter((e) => !validee(e.etape));
+  const raisonBlocage = nonValidees.length
+    ? `validez d'abord ${nonValidees.map((e) => e.libelle.toLowerCase()).join(", ")}`
+    : erreurs.length ? "saisissez le stock final réel de tous les articles concernés" : concernees === 0 ? "aucun article saisi" : null;
 
-  const enregistrer = (cloturer: boolean) =>
+  const envoyer = (action: ActionInventaire, confirmation?: string) =>
     demarrer(async () => {
-      if (cloturer && !confirm("Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")) return;
-      const r = await enregistrerInventaire(inv.dateJournee, m.code, lignes.filter(ligneConcernee), cloturer);
+      if (confirmation && !confirm(confirmation)) return;
+      const r = await enregistrerInventaire(inv.dateJournee, m.code, lignes.filter(ligneConcernee), action, codes);
       setMessage({ ok: r.ok, texte: r.message });
       if (r.ok) {
         setModifie(false);
-        setMouvementsModifies(false);
         router.refresh();
       }
     });
 
   const carteFamille = (cle: string, libelle: string, total: number, saisis: number, restants: number) => (
     <button key={cle || "toutes"} type="button" onClick={() => setFamille(cle)} aria-pressed={famille === cle}
-      className={`flex min-h-16 flex-col items-start justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+      className={`flex min-h-16 flex-col items-start justify-between rounded-lg border px-3 py-2 text-left text-sm ${
         famille === cle ? "border-marque bg-marque text-white" : "border-slate-200 bg-white hover:border-marque"
       }`}>
       <span className="font-semibold">{libelle}</span>
@@ -112,6 +152,33 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
       </span>
     </button>
   );
+
+  /** Cellule d'état d'une étape, sous l'en-tête de sa colonne. */
+  const celluleEtape = ({ etape, libelle, validees, codes: libelleCodes }: (typeof ETAPES)[number]) => {
+    const v = validee(etape);
+    return (
+      <th key={etape} className={`min-w-40 align-top font-normal ${v ? "bg-emerald-50" : ""}`}>
+        <div className="flex flex-col gap-1.5">
+          {v ? (
+            <span className="text-xs font-semibold text-emerald-800">✓ {validees} · {v.login} · {heure(v.date)}</span>
+          ) : (
+            <span className="text-xs font-semibold text-amber-700">À valider</span>
+          )}
+          {libelleCodes && <Codes libelle={libelleCodes} codes={codes[etape as EtapeAvecCodes]} verrouille={lecture || !!v} onChange={(c) => majCodes(etape as EtapeAvecCodes, c)} />}
+          {!lecture && (v ? (
+            <button type="button" className="btn-secondaire w-full py-1 text-xs" disabled={enCours}
+              onClick={() => envoyer({ type: "ANNULER_VALIDATION", etape }, `Modifier les ${libelle.toLowerCase()} ? La colonne redevient modifiable et devra être validée de nouveau.`)}>
+              Modifier
+            </button>
+          ) : (
+            <button type="button" className="btn w-full py-1 text-xs" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape })}>
+              Valider les {libelle.toLowerCase()}
+            </button>
+          ))}
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -139,7 +206,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
       {!lecture && (
         <p className="note">
           {inv.reprise ? <>Stock initial = stock final réel de l&apos;inventaire du {inv.reprise.date} (non modifiable).</> : <>Premier inventaire de ce magasin : stock initial à 0 ; le stock final réel compté aujourd&apos;hui deviendra le stock initial de demain.</>}
-          {" "}Étapes : 1. saisir réceptions, ventes et retours puis <b>Enregistrer</b> ; 2. compter le stock final réel puis <b>Clôturer</b>.
+          {" "}Validez les réceptions (avec leurs codes), les ventes et les retours (avec leurs codes), puis saisissez le stock final réel et clôturez.
         </p>
       )}
 
@@ -160,27 +227,38 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
 
       {message && <p className={message.ok ? "alerte-ok" : "alerte-erreur"}>{message.texte}</p>}
 
-      <div className="carte max-h-[70vh] overflow-auto p-0">
+      <div className="carte max-h-[75vh] overflow-auto p-0">
         <table className="tableau">
           <thead className="sticky top-0 z-10">
             <tr>
-              <th>Société</th><th>Magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th><th>Réceptions</th><th>Ventes</th><th>Retours</th><th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
+              <th>Société</th><th>Magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th>
+              {ETAPES.map((e) => <th key={e.etape}>{e.libelle}</th>)}
+              <th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
             </tr>
-            {!lecture && (
+            {inv.etapes && (
               <tr>
-                <th colSpan={5} className="text-xs font-normal text-slate-500">
-                  {modifie ? <span className="text-amber-700">Modifications non enregistrées</span> : raisonBlocage ? `Clôture : ${raisonBlocage.toLowerCase()}` : "Prêt à clôturer"}
+                <th colSpan={5} className="align-top font-normal">
+                  {!lecture && (
+                    <div className="flex flex-col items-start gap-1.5">
+                      <span className={`text-xs ${modifie ? "text-amber-700" : "text-slate-500"}`}>{modifie ? "Modifications non enregistrées" : "Tout est enregistré"}</span>
+                      <button type="button" className="btn-secondaire py-1 text-xs" disabled={enCours} onClick={() => envoyer({ type: "BROUILLON" })}>
+                        {enCours ? "Enregistrement…" : "Enregistrer le brouillon"}
+                      </button>
+                    </div>
+                  )}
                 </th>
-                <th colSpan={3}>
-                  <button className="btn w-full" disabled={enCours} onClick={() => enregistrer(false)}>
-                    {enCours ? "Enregistrement…" : "1. Enregistrer"}
-                  </button>
-                </th>
+                {ETAPES.map(celluleEtape)}
                 <th />
-                <th colSpan={2}>
-                  <button className="btn w-full bg-emerald-700 hover:bg-emerald-800" disabled={clotureBloquee} title={raisonBlocage} onClick={() => enregistrer(true)}>
-                    2. Clôturer
-                  </button>
+                <th colSpan={2} className="align-top font-normal">
+                  {!lecture && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className={`text-xs ${raisonBlocage ? "text-slate-500" : "font-semibold text-emerald-800"}`}>{raisonBlocage ? `Clôture : ${raisonBlocage}` : "Prêt à clôturer"}</span>
+                      <button type="button" className="btn w-full bg-emerald-700 py-1 text-xs hover:bg-emerald-800" disabled={enCours || !!raisonBlocage}
+                        onClick={() => envoyer({ type: "CLOTURER" }, "Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")}>
+                        Clôturer l&apos;inventaire
+                      </button>
+                    </div>
+                  )}
                 </th>
               </tr>
             )}
@@ -195,8 +273,10 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
                   <td className="font-mono text-xs">{l.codeArticle}</td>
                   <td>{l.designation}<div className="note text-xs">{l.famille}</div></td>
                   <td><Quantite label={`Stock initial ${l.codeArticle}`} valeur={l.stockInitial} verrouille /></td>
-                  {MOUVEMENTS.map((k) => (
-                    <td key={k}><Quantite label={`${k} ${l.codeArticle}`} colonne={k} valeur={l[k]} verrouille={lecture} onChange={(v) => maj(l.codeArticle, k, v)} /></td>
+                  {ETAPES.map((e) => (
+                    <td key={e.etape}>
+                      <Quantite label={`${e.libelle} ${l.codeArticle}`} colonne={e.colonne} valeur={l[e.colonne]} verrouille={lecture || !!validee(e.etape)} onChange={(v) => maj(l.codeArticle, e.colonne, v)} />
+                    </td>
                   ))}
                   <td className="text-right tabular-nums">{fmt(c.stockFinalTheorique)}</td>
                   <td><Quantite label={`Stock final réel ${l.codeArticle}`} colonne="stockFinalReel" valeur={l.stockFinalReel} verrouille={lecture} onChange={(v) => maj(l.codeArticle, "stockFinalReel", v)} /></td>
