@@ -852,3 +852,65 @@ model JournalAudit {
   @@index([action])
   @@map("journal_audit")
 }
+
+/// Libellés et listes de référence affichés par le portail (statuts, unités, natures de caisse, étapes, textes…).
+/// Modifiables en base sans redéploiement ; le code ne s'appuie que sur les codes.
+model Libelle {
+  domaine          String    @db.VarChar(40)
+  code             String    @db.VarChar(60)
+  libelle          String    @db.VarChar(255)
+  /// Donnée complémentaire selon le domaine (ex. statuts d'un groupe, séparés par des virgules).
+  valeur           String?   @db.VarChar(255)
+  ordre            Int       @default(0)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  @@id([domaine, code])
+  @@map("libelle")
+}
+
+/// Logos affichés par le portail (fichiers dans public/logos).
+model Logo {
+  code             String    @id @db.VarChar(30)
+  libelle          String    @db.VarChar(100)
+  fichier          String    @db.VarChar(100)
+  /// Hauteur d'affichage en pixels dans le bandeau de la page de connexion.
+  hauteur          Int       @default(40)
+  ordre            Int       @default(0)
+  afficheConnexion Boolean   @default(true)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  @@map("logo")
+}
+
+/// Zones mises en évidence sur la carte de la page de connexion.
+model ZoneCarte {
+  code             String    @id @db.VarChar(30)
+  libelle          String    @db.VarChar(100)
+  /// Codes ISO des gouvernorats couverts, séparés par des virgules (ex. « TN-11,TN-12,TN-13,TN-14 »).
+  gouvernorats     String    @db.VarChar(255)
+  ordre            Int       @default(0)
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  @@map("zone_carte")
+}

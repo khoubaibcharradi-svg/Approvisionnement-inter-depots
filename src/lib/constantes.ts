@@ -1,4 +1,3 @@
-import type { StatutDemande } from "@prisma/client";
 
 export const ROLES = {
   SUPERVISEUR: "SUPERVISEUR",
@@ -13,16 +12,6 @@ export const ROLES = {
 
 export type CodeRole = (typeof ROLES)[keyof typeof ROLES];
 
-export const LIBELLES_ROLES: Record<CodeRole, string> = {
-  SUPERVISEUR: "Superviseur",
-  CHEF_VENTE: "Chef de Vente",
-  DIRECTEUR_COMMERCIAL: "Directeur commercial",
-  DIRECTEUR_LOGISTIQUE: "Directeur logistique",
-  CHEF_DEPOT: "Chef dépôt Radès",
-  ADMINISTRATEUR: "Administrateur (DGA)",
-  AGENT_DEPOT: "Agent dépôt",
-  CONSULTANT_CR: "Consultation comptes rendus",
-};
 
 /** Rôles sans accès au circuit des demandes : l'agent dépôt saisit le compte rendu, le consultant le lit. */
 export const ROLES_HORS_DEMANDES: readonly CodeRole[] = [ROLES.AGENT_DEPOT, ROLES.CONSULTANT_CR];
@@ -34,30 +23,8 @@ export const ROLES_LECTURE_COMPTES_RENDUS: CodeRole[] = [ROLES.ADMINISTRATEUR, R
 export const accueilDuRole = (role: CodeRole) =>
   role === ROLES.AGENT_DEPOT ? "/compte-rendu" : role === ROLES.CONSULTANT_CR ? "/admin/comptes-rendus" : "/demandes";
 
-export const SOCIETES_DEFAUT = [
-  { code: "PROMOFOOD", libelle: "Promofood" },
-  { code: "BEESKY", libelle: "Beesky" },
-  { code: "PROXIM", libelle: "Proxim" },
-  { code: "COFILL", libelle: "COFILL" },
-];
 
-export const LIBELLES_STATUTS: Record<StatutDemande, string> = {
-  A_VALIDER: "À valider (Chef de Vente)",
-  A_APPROUVER: "À approuver (Dir. commercial)",
-  APPROUVEE: "Approuvée · envoi Radès",
-  EN_PREPARATION: "En préparation",
-  EXPEDIEE: "Expédiée",
-  REJETEE: "Rejetée",
-};
 
-/** Groupes d'affichage de la liste des demandes (module 3). */
-export const GROUPES_STATUTS: { titre: string; statuts: StatutDemande[] }[] = [
-  { titre: "À valider", statuts: ["A_VALIDER"] },
-  { titre: "À approuver", statuts: ["A_APPROUVER"] },
-  { titre: "Chez Radès", statuts: ["APPROUVEE", "EN_PREPARATION"] },
-  { titre: "Expédiées", statuts: ["EXPEDIEE"] },
-  { titre: "Rejetées", statuts: ["REJETEE"] },
-];
 
 /** Rôles qui voient le stock et les quotas. */
 export const ROLES_VOIENT_STOCK: readonly string[] = [

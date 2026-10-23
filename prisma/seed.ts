@@ -9,7 +9,27 @@ import path from "node:path";
 import { prisma } from "../src/lib/prisma";
 import { lireFeuilleXlsx, lireNombre, codeMetier } from "../src/lib/tableur";
 import { hacherMotDePasse } from "../src/lib/auth/mot-de-passe";
-import { LIBELLES_ROLES, PARAMETRES_DEFAUT, ROLES, SOCIETES_DEFAUT, type CodeRole } from "../src/lib/constantes";
+import { PARAMETRES_DEFAUT, ROLES, type CodeRole } from "../src/lib/constantes";
+
+// Données du premier chargement uniquement : ensuite, les libellés se gèrent en base.
+const LIBELLES_ROLES: Record<CodeRole, string> = {
+  SUPERVISEUR: "Superviseur",
+  CHEF_VENTE: "Chef de Vente",
+  DIRECTEUR_COMMERCIAL: "Directeur commercial",
+  DIRECTEUR_LOGISTIQUE: "Directeur logistique",
+  CHEF_DEPOT: "Chef dépôt Radès",
+  ADMINISTRATEUR: "Administrateur (DGA)",
+  AGENT_DEPOT: "Agent dépôt",
+  CONSULTANT_CR: "Consultation comptes rendus",
+};
+
+const SOCIETES_DEFAUT = [
+  { code: "PROMOFOOD", libelle: "Promofood" },
+  { code: "BEESKY", libelle: "Beesky" },
+  { code: "PROXIM", libelle: "Proxim" },
+  { code: "COFILL", libelle: "COFILL" },
+];
+
 
 const AUTEUR = "seed";
 const FICHIER = path.resolve(process.env.SEED_FICHIER || path.join(__dirname, "data", "parametrage.xlsx"));

@@ -3,13 +3,13 @@
 import { useActionState } from "react";
 import { seConnecter, type EtatConnexion } from "./actions";
 
-export function FormulaireConnexion() {
+export function FormulaireConnexion({ acces }: { acces: string }) {
   const [etat, action, enCours] = useActionState<EtatConnexion, FormData>(seConnecter, {});
   return (
     <form action={action} className="flex w-full max-w-sm flex-col gap-5 rounded-2xl bg-white p-8 shadow-xl shadow-slate-900/10 sm:p-10">
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-bold">Se connecter</h2>
-        <p className="text-slate-600">Accès réservé au personnel du groupe.</p>
+        <p className="text-slate-600">{acces}</p>
       </div>
       <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
         Identifiant

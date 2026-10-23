@@ -1,4 +1,5 @@
-import { LIBELLES_NATURES, calculerCaisse, calculerRecette, calculerStock } from "@/lib/compte-rendu/calculs";
+import { calculerCaisse, calculerRecette, calculerStock } from "@/lib/compte-rendu/calculs";
+import { libelles } from "@/lib/referentiels";
 import type { detailCompteRendu } from "@/lib/compte-rendu/service";
 import type { detailInventaire } from "@/lib/compte-rendu/inventaire";
 
@@ -65,7 +66,8 @@ function Obs({ titre, texte }: { titre: string; texte: string }) {
 }
 
 /** Compte rendu journalier en lecture seule (administrateur et historique de l'agent). */
-export function VueCompteRendu({ cr, societes, inventaire = [] }: { cr: Detail; societes: Record<string, string>; inventaire?: LigneInventaire[] }) {
+export async function VueCompteRendu({ cr, societes, inventaire = [] }: { cr: Detail; societes: Record<string, string>; inventaire?: LigneInventaire[] }) {
+  const natures = await libelles("NATURE_CAISSE");
   const s = cr.saisie;
   const t = cr.totaux;
   return (
@@ -143,7 +145,7 @@ export function VueCompteRendu({ cr, societes, inventaire = [] }: { cr: Detail; 
             <tbody>
               {s.caisses.map((c) => {
                 const k = calculerCaisse(c);
-                return <tr key={c.nature}><td>{LIBELLES_NATURES[c.nature]}{c.precision ? ` (${c.precision})` : ""}</td>{nombre(c.soldeVeille)}{nombre(c.encaissements)}{nombre(c.transferts)}{nombre(k.soldeTheorique)}{nombre(c.soldeReel)}{ecart(k.ecart)}<td>{c.observations}</td></tr>;
+                return <tr key={c.nature}><td>{natures[c.nature]}{c.precision ? ` (${c.precision})` : ""}</td>{nombre(c.soldeVeille)}{nombre(c.encaissements)}{nombre(c.transferts)}{nombre(k.soldeTheorique)}{nombre(c.soldeReel)}{ecart(k.ecart)}<td>{c.observations}</td></tr>;
               })}
               <tr className="font-semibold"><td>TOTAL</td>{nombre(t.caisse.soldeVeille)}{nombre(t.caisse.encaissements)}{nombre(t.caisse.transferts)}{nombre(t.caisse.soldeTheorique)}{nombre(t.caisse.soldeReel)}{ecart(t.caisse.ecart)}<td /></tr>
             </tbody>

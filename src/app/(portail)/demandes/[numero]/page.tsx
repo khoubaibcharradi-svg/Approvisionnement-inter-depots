@@ -2,14 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { detailDemande } from "@/lib/demandes/lecture";
-import { LIBELLES_STATUTS, ROLES } from "@/lib/constantes";
+import { ROLES } from "@/lib/constantes";
+import { libelles, listeLibelles } from "@/lib/referentiels";
 import { auditer } from "@/lib/audit";
 import { PanneauActions } from "./panneau-actions";
 
-const ETAPES = ["1 · Superviseur", "2 · Chef de Vente", "3 · Dir. commercial", "4 · Radès"];
 const RANG: Record<string, number> = { A_VALIDER: 1, A_APPROUVER: 2, APPROUVEE: 3, EN_PREPARATION: 4, EXPEDIEE: 4 };
-const DECISIONS = { ACCORD: "✔ Accord", REFUS: "✖ Refus", MODIFICATION: "✎ Modifiée" } as const;
-const UNITES = { PIECE: "pièce(s)", CARTON: "carton(s)" } as const;
 
 export default async function PageDemande({ params }: { params: Promise<{ numero: string }> }) {
   const u = await exigerUtilisateur();
@@ -21,6 +19,12 @@ export default async function PageDemande({ params }: { params: Promise<{ numero
     notFound();
   }
   const rang = RANG[d.statut] ?? 0;
+  const [statuts, unites, decisions, etapes] = await Promise.all([
+    libelles("STATUT_DEMANDE"),
+    libelles("UNITE"),
+    libelles("DECISION_DEPOT"),
+    listeLibelles("ETAPE_DEMANDE").then((l) => l.map((e, i) => `${i + 1} · ${e.libelle}`)),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,10 +35,10 @@ export default async function PageDemande({ params }: { params: Promise<{ numero
             <h1 className="titre-page">{d.numero}</h1>
             <p className="note">{d.canal} · dépôt {d.depot} · saisie par {d.saisiePar} le {d.dateSaisie.toLocaleString("fr-FR")}</p>
           </div>
-          <span className="badge text-sm">{LIBELLES_STATUTS[d.statut]}</span>
+          <span className="badge text-sm">{statuts[d.statut]}</span>
         </div>
         <ol className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
-          {ETAPES.map((e, i) => {
+          {etapes.map((e, i) => {
             const rejet = d.statut === "REJETEE" && d.etapeRejet === i;
             const fait = d.statut === "REJETEE" ? i < (d.etapeRejet ?? 0) : i < rang;
             const courant = d.statut !== "REJETEE" && i === rang;
@@ -63,12 +67,12 @@ export default async function PageDemande({ params }: { params: Promise<{ numero
                 <td className="font-mono text-xs">{l.codeArticle}</td>
                 <td>{l.designation}</td>
                 <td>
-                  {l.quantite} {UNITES[l.unite]}
+                  {l.quantite} {unites[l.unite]}
                   {l.quantite !== l.quantiteInitiale && <span className="note"> (demandé {l.quantiteInitiale})</span>}
                 </td>
                 <td>{l.dateLivraisonSouhaitee}</td>
                 <td>{l.dateExpeditionPrevue ?? "—"}</td>
-                <td>{l.decisionDepot ? `${DECISIONS[l.decisionDepot]}${l.motifDecision ? ` · ${l.motifDecision}` : ""}` : <span className="note">en attente</span>}</td>
+                <td>{l.decisionDepot ? `${decisions[l.decisionDepot]}${l.motifDecision ? ` · ${l.motifDecision}` : ""}` : <span className="note">en attente</span>}</td>
                 {l.aide && (
                   <>
                     <td>{l.aide.stockCartons}{!l.aide.pcb && <span className="note" title="PCB non renseigné"> *</span>}</td>

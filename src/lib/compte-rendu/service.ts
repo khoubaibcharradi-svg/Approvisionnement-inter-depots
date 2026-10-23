@@ -9,6 +9,7 @@ import { auditer } from "../audit";
 import { prochainNumero } from "../compteur";
 import { parametreNombre } from "../parametres";
 import { ROLES, ROLES_LECTURE_COMPTES_RENDUS } from "../constantes";
+import { libelles } from "../referentiels";
 import { valorisationDepot } from "./inventaire";
 import type { UtilisateurCourant } from "../auth/session";
 import {
@@ -313,6 +314,7 @@ export async function chargerJournee(agent: UtilisateurCourant, dateJournee: str
     pieces: (existant?.pieces ?? []).map((p) => ({ numeroPiece: p.numeroPiece, rubrique: p.rubrique, nomFichier: p.nomFichier, taille: p.taille })),
     reprise: r ? { numero: r.numero, date: r.date, magasins: Object.keys(r.stockInitial), caisse: Object.keys(r.soldeVeille).length > 0 } : null,
     pieceObligatoire: (await parametreNombre("CR_PIECE_OBLIGATOIRE")) === 1,
+    libellesNatures: { ...(await libelles("NATURE_CAISSE")) },
     saisie,
   };
 }
@@ -389,7 +391,7 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
       if (cr && cr.version !== version) throw new ErreurCompteRendu("Le compte rendu a été modifié entre-temps (autre agent du dépôt). Rechargez la page.");
 
       if (soumettre) {
-        const manques = [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire })];
+        const manques = [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire, natures: { ...(await libelles("NATURE_CAISSE")) } })];
         if (manques.length) throw new ErreurCompteRendu(`Compte rendu incomplet :\n• ${manques.join("\n• ")}`);
       }
 
