@@ -18,7 +18,9 @@ export type EvenementAudit = {
 async function origineRequete() {
   try {
     const h = await headers();
-    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null;
+    // X-Real-IP est écrit par Nginx ($remote_addr) et ne peut pas être imposé par le client ;
+    // dans X-Forwarded-For, seule la dernière adresse (ajoutée par Nginx) est fiable, la première est falsifiable.
+    const ip = h.get("x-real-ip")?.trim() || h.get("x-forwarded-for")?.split(",").at(-1)?.trim() || null;
     return { adresseIp: ip?.slice(0, 45) ?? null, userAgent: h.get("user-agent")?.slice(0, 255) ?? null };
   } catch {
     // Appel hors requête HTTP (script, tâche planifiée).
