@@ -8,7 +8,7 @@ import { prisma, champsSuppression, type Transaction } from "../prisma";
 import { auditer } from "../audit";
 import { prochainNumero } from "../compteur";
 import { parametreNombre } from "../parametres";
-import { ROLES } from "../constantes";
+import { ROLES, ROLES_LECTURE_COMPTES_RENDUS } from "../constantes";
 import { valorisationDepot } from "./inventaire";
 import type { UtilisateurCourant } from "../auth/session";
 import {
@@ -619,7 +619,7 @@ export async function pieceAutorisee(u: UtilisateurCourant, numero: string, nume
     include: { compteRendu: { select: { codeDepot: true } } },
   });
   if (!p) return null;
-  const autorise = u.role === ROLES.ADMINISTRATEUR || (u.role === ROLES.AGENT_DEPOT && u.codeDepotAgent === p.compteRendu.codeDepot);
+  const autorise = ROLES_LECTURE_COMPTES_RENDUS.includes(u.role) || (u.role === ROLES.AGENT_DEPOT && u.codeDepotAgent === p.compteRendu.codeDepot);
   return autorise ? { ...p, chemin: path.join(dossierPieces(), p.fichierStocke) } : null;
 }
 
