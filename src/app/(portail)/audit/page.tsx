@@ -28,7 +28,7 @@ export default async function PageAudit({ searchParams }: { searchParams: Promis
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Journal d&apos;audit ({total} événements)</h1>
+      <h1 className="titre-page">Journal d&apos;audit ({total} événements)</h1>
       <form className="carte flex flex-wrap items-end gap-2">
         <label className="etiquette">Utilisateur<input name="login" defaultValue={p.login} className="champ" /></label>
         <label className="etiquette">Action<input name="action" defaultValue={p.action} className="champ" placeholder="CONNEXION, DEMANDE…" /></label>

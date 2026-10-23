@@ -15,7 +15,7 @@ export default async function PageHistorique() {
     : [];
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Historique des comptes rendus de mon dépôt</h1>
+      <h1 className="titre-page">Historique des comptes rendus de mon dépôt</h1>
       <div className="carte overflow-x-auto p-0">
         <table className="tableau">
           <thead><tr><th>Journée</th><th>N°</th><th>Agent</th><th>Statut</th></tr></thead>

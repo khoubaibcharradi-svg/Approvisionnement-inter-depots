@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "../prisma";
 import { auditer } from "../audit";
 import { NOM_COOKIE, dureeSessionSecondes, lireJeton, signerJeton } from "./jeton";
-import { ROLES, accueilDuRole, type CodeRole } from "../constantes";
+import { ROLES_HORS_DEMANDES, accueilDuRole, type CodeRole } from "../constantes";
 import type { Acteur } from "../workflow";
 
 export type UtilisateurCourant = Acteur & {
@@ -58,7 +58,7 @@ export const utilisateurCourant = cache(async (): Promise<UtilisateurCourant | n
 /**
  * Exige un utilisateur connecté (et éventuellement un rôle). Redirige sinon.
  * Sans liste de rôles, la page est ouverte aux rôles du circuit des demandes : l'agent dépôt
- * n'y a pas accès (il ne voit que le compte rendu), sauf si `tousRoles` est demandé.
+ * et le consultant des comptes rendus n'y ont pas accès, sauf si `tousRoles` est demandé.
  */
 export async function exigerUtilisateur(
   roles?: readonly CodeRole[],
@@ -67,7 +67,7 @@ export async function exigerUtilisateur(
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   if (u.doitChangerMotDePasse && !options?.autoriserMdpExpire) redirect("/mot-de-passe?obligatoire=1");
-  const refuse = roles ? !roles.includes(u.role) : !options?.tousRoles && u.role === ROLES.AGENT_DEPOT;
+  const refuse = roles ? !roles.includes(u.role) : !options?.tousRoles && ROLES_HORS_DEMANDES.includes(u.role);
   if (refuse) {
     await auditer({
       action: "ACCES_PAGE_REFUSE",

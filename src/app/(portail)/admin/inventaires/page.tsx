@@ -19,7 +19,7 @@ export default async function PageInventaires({ searchParams }: { searchParams: 
   ]);
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Inventaires des dépôts</h1>
+      <h1 className="titre-page">Inventaires des dépôts</h1>
       <form className="carte grid gap-3 sm:grid-cols-3 lg:grid-cols-6 lg:items-end">
         <label className="etiquette">Date début<input type="date" name="du" defaultValue={f.du} className="champ" /></label>
         <label className="etiquette">Date fin<input type="date" name="au" defaultValue={f.au} className="champ" /></label>

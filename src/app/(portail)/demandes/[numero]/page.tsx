@@ -28,7 +28,7 @@ export default async function PageDemande({ params }: { params: Promise<{ numero
       <div className="carte flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h1 className="text-lg font-semibold">{d.numero}</h1>
+            <h1 className="titre-page">{d.numero}</h1>
             <p className="note">{d.canal} · dépôt {d.depot} · saisie par {d.saisiePar} le {d.dateSaisie.toLocaleString("fr-FR")}</p>
           </div>
           <span className="badge text-sm">{LIBELLES_STATUTS[d.statut]}</span>

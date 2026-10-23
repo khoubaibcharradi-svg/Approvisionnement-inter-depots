@@ -1,13 +1,13 @@
 import "server-only";
 import type { Prisma, StatutDemande } from "@prisma/client";
 import { prisma } from "../prisma";
-import { ROLES, ROLES_AIDE_DECISION } from "../constantes";
+import { ROLES, ROLES_AIDE_DECISION, ROLES_HORS_DEMANDES } from "../constantes";
 import type { UtilisateurCourant } from "../auth/session";
 import * as wf from "../workflow";
 
 /** Filtre de visibilité appliqué en base (§3) : jamais seulement dans l'interface. */
 export function filtreVisibilite(a: UtilisateurCourant): Prisma.DemandeWhereInput {
-  if (a.role === ROLES.AGENT_DEPOT) return { numero: { in: [] } };
+  if (ROLES_HORS_DEMANDES.includes(a.role)) return { numero: { in: [] } };
   if (a.role === ROLES.SUPERVISEUR) return { loginSaisie: a.login };
   if (a.role === ROLES.CHEF_VENTE) return { codeCanal: { in: a.canaux } };
   return {};

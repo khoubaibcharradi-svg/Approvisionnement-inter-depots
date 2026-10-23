@@ -15,7 +15,7 @@ export default async function PageVehiculesAgent() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">Véhicules du dépôt {depot.libelle}</h1>
+        <h1 className="titre-page">Véhicules du dépôt {depot.libelle}</h1>
         <p className="note">Ajoutez les véhicules de vos agences, mettez à jour leur description et leur chauffeur habituel, ou désactivez ceux qui ne roulent plus. Les chauffeurs de cette liste sont proposés dans la caisse recettes du compte rendu.</p>
       </div>
       <GestionVehicules

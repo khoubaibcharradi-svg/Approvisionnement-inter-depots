@@ -18,7 +18,7 @@ export default async function PageNouvelleDemande() {
   const libelleDepot = new Map(depots.map((d) => [d.code, d.libelle]));
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Nouvelle demande d&apos;approvisionnement</h1>
+      <h1 className="titre-page">Nouvelle demande d&apos;approvisionnement</h1>
       {canaux.length === 0 ? (
         <p className="alerte-erreur">Aucun canal ne vous est affecté : contactez l&apos;administrateur.</p>
       ) : (

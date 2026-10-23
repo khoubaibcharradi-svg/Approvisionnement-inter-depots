@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auditer } from "@/lib/audit";
 import { journal } from "@/lib/journal";
 import { exigerUtilisateur } from "@/lib/auth/session";
+import { messagePublic } from "@/lib/erreurs";
 import { ROLES } from "@/lib/constantes";
 import { prochainNumero } from "@/lib/compteur";
 import { codeMetier, lireNombre, lireTableur, sansEntete } from "@/lib/tableur";
@@ -75,7 +76,7 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
     revalidatePath("/catalogue");
     return { ok: true, message };
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Erreur" };
+    return { ok: false, message: messagePublic(e, "Catalogue") };
   }
 }
 
@@ -138,7 +139,7 @@ export async function importerCatalogue(_: Resultat | null, form: FormData): Pro
     return { ok: true, message: `${r.numero} : ${r.ajoutes} ajoutés, ${r.maj} mis à jour, ${r.ignores} ignorés.` };
   } catch (e) {
     journal.warn("Import catalogue en échec", { erreur: e, login: u.login });
-    return { ok: false, message: e instanceof Error ? e.message : "Fichier illisible." };
+    return { ok: false, message: messagePublic(e, "Import") };
   }
 }
 
@@ -183,7 +184,7 @@ export async function importerStock(_: Resultat | null, form: FormData): Promise
     return { ok: true, message: `${r.numero} : ${r.majs} articles mis à jour, ${r.ignores} ignorés, ${r.quotas} quotas ramenés au stock.` };
   } catch (e) {
     journal.warn("Import stock en échec", { erreur: e, login: u.login });
-    return { ok: false, message: e instanceof Error ? e.message : "Fichier illisible." };
+    return { ok: false, message: messagePublic(e, "Import") };
   }
 }
 
@@ -225,6 +226,6 @@ export async function importerPrix(_: Resultat | null, form: FormData): Promise<
     return { ok: true, message: `${r.numero} : ${r.majs} prix mis à jour, ${r.ignores} ignorés.` };
   } catch (e) {
     journal.warn("Import des prix en échec", { erreur: e, login: u.login });
-    return { ok: false, message: e instanceof Error ? e.message : "Fichier illisible." };
+    return { ok: false, message: messagePublic(e, "Import") };
   }
 }

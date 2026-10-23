@@ -43,6 +43,13 @@ describe("visibilité", () => {
     const a = actionsPossibles(cvAutre, d());
     expect(Object.values(a).every((v) => !v)).toBe(true);
   });
+  it("l'agent dépôt et le consultant des comptes rendus ne voient aucune demande", () => {
+    for (const role of ["AGENT_DEPOT", "CONSULTANT_CR"] as const) {
+      const a: Acteur = { login: "x", role, canaux: ["GMS"] };
+      expect(peutVoir(a, d())).toBe(false);
+      expect(Object.values(actionsPossibles(a, d())).every((v) => !v)).toBe(true);
+    }
+  });
 });
 
 describe("modification directe", () => {

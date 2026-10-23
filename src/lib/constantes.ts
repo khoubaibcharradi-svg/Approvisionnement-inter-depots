@@ -8,6 +8,7 @@ export const ROLES = {
   CHEF_DEPOT: "CHEF_DEPOT",
   ADMINISTRATEUR: "ADMINISTRATEUR",
   AGENT_DEPOT: "AGENT_DEPOT",
+  CONSULTANT_CR: "CONSULTANT_CR",
 } as const;
 
 export type CodeRole = (typeof ROLES)[keyof typeof ROLES];
@@ -20,10 +21,18 @@ export const LIBELLES_ROLES: Record<CodeRole, string> = {
   CHEF_DEPOT: "Chef dépôt Radès",
   ADMINISTRATEUR: "Administrateur (DGA)",
   AGENT_DEPOT: "Agent dépôt",
+  CONSULTANT_CR: "Consultation comptes rendus",
 };
 
-/** Page d'accueil selon le rôle : l'agent dépôt n'a accès qu'au compte rendu journalier. */
-export const accueilDuRole = (role: CodeRole) => (role === ROLES.AGENT_DEPOT ? "/compte-rendu" : "/demandes");
+/** Rôles sans accès au circuit des demandes : l'agent dépôt saisit le compte rendu, le consultant le lit. */
+export const ROLES_HORS_DEMANDES: readonly CodeRole[] = [ROLES.AGENT_DEPOT, ROLES.CONSULTANT_CR];
+
+/** Rôles qui consultent les comptes rendus de tous les dépôts (lecture seule pour le consultant). */
+export const ROLES_LECTURE_COMPTES_RENDUS: CodeRole[] = [ROLES.ADMINISTRATEUR, ROLES.CONSULTANT_CR];
+
+/** Page d'accueil selon le rôle. */
+export const accueilDuRole = (role: CodeRole) =>
+  role === ROLES.AGENT_DEPOT ? "/compte-rendu" : role === ROLES.CONSULTANT_CR ? "/admin/comptes-rendus" : "/demandes";
 
 export const SOCIETES_DEFAUT = [
   { code: "PROMOFOOD", libelle: "Promofood" },
