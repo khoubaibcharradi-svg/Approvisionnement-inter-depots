@@ -209,6 +209,39 @@ L'environnement de recette est une deuxième installation, séparée de la produ
    ```
 6. **Mises à jour de la recette** : `sudo -u appro bash /opt/appro-test/deploy/mettre-a-jour.sh test`
 
+## 10. Protection contre les attaques
+
+Une seule commande, à relancer sans risque après chaque modification des fichiers `deploy/nginx-*.conf` ou `deploy/fail2ban/*` :
+
+```bash
+sudo bash /opt/appro/deploy/durcissement.sh
+```
+
+| Mesure | Fichier | Effet |
+|---|---|---|
+| Limites de débit et délais Nginx | `nginx-protection.conf`, `nginx-securite.conf` | 20 requêtes/s par adresse (pointes à 80), 40 connexions simultanées, 10 tentatives de connexion/min ; coupe les connexions trop lentes (slowloris) ; réponse 429 au-delà |
+| Refus des robots | `nginx-securite.conf` | Fichiers cachés (`.env`, `.git`) → 404 ; chemins visés par les scanners (WordPress, phpunit…) → connexion fermée |
+| Refus des accès sans le bon nom | `nginx-defaut.conf` | Accès par l'adresse IP ou un nom inconnu → connexion fermée, sans certificat présenté |
+| Bannissement automatique | `fail2ban/appro.conf` | SSH (5 échecs), dépassements de débit, scanners, **échecs de connexion au portail** (8 en 15 min → 2 h de bannissement, plus long en cas de récidive) |
+| Pare-feu et noyau | `durcissement.sh` | SSH limité par UFW ; SYN cookies, anti-usurpation d'adresse, redirections ICMP refusées |
+
+Vérifications :
+
+```bash
+sudo fail2ban-client status                    # liste des prisons actives
+sudo fail2ban-client status appro-connexion    # adresses bannies pour échecs de connexion
+sudo fail2ban-client set appro-connexion unbanip 1.2.3.4   # débannir une adresse (ex. le bureau)
+```
+
+Pour ne jamais bannir l'adresse IP fixe du bureau, créez `/etc/fail2ban/jail.d/appro.local` (non écrasé par le script) :
+
+```ini
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1 ADRESSE_IP_DU_BUREAU
+```
+
+puis `sudo systemctl restart fail2ban`.
+
 ## Dépannage
 
 | Symptôme | Commande |
