@@ -7,13 +7,27 @@ import { calculerLigneInventaire, controlerInventaire, ligneConcernee } from "@/
 import { enregistrerInventaire } from "./actions";
 
 type Ligne = InventaireJournee["lignes"][number];
+type Colonne = "receptions" | "ventes" | "retours" | "stockFinalReel";
+type Vue = "tous" | "concernes" | "aCompter";
+const MOUVEMENTS = ["receptions", "ventes", "retours"] as const;
+const TOUTES = "";
 const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
+const aCompter = (l: Ligne) => ligneConcernee(l) && l.stockFinalReel === null;
 
-function Quantite({ valeur, onChange, verrouille, label }: { valeur: number | null; onChange: (v: number | null) => void; verrouille: boolean; label: string }) {
+/** Entrée : passe à la même colonne de la ligne suivante, comme dans un tableur. */
+function suivant(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const champs = [...document.querySelectorAll<HTMLInputElement>(`input[data-col="${e.currentTarget.dataset.col}"]`)];
+  champs[champs.indexOf(e.currentTarget) + 1]?.focus();
+}
+
+function Quantite({ valeur, onChange, verrouille, label, colonne }: { valeur: number | null; onChange?: (v: number | null) => void; verrouille: boolean; label: string; colonne?: Colonne }) {
   return (
-    <input type="number" inputMode="decimal" step="any" min={0} disabled={verrouille} aria-label={label}
+    <input type="number" inputMode="decimal" step="any" min={0} disabled={verrouille} aria-label={label} data-col={colonne}
       className={`champ w-24 text-right ${verrouille ? "bg-slate-100 text-slate-600" : ""}`}
-      value={valeur ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />
+      value={valeur ?? ""} onKeyDown={suivant} onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => onChange?.(e.target.value === "" ? null : Number(e.target.value))} />
   );
 }
 
@@ -21,12 +35,14 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const router = useRouter();
   const [lignes, setLignes] = useState<Ligne[]>(inv.lignes);
   const [filtre, setFiltre] = useState("");
-  const [seulementConcernees, setSeulementConcernees] = useState(false);
+  const [famille, setFamille] = useState(TOUTES);
+  const [vue, setVue] = useState<Vue>("tous");
   const [modifie, setModifie] = useState(false);
+  // Réceptions / ventes / retours modifiés depuis le dernier enregistrement : la clôture attend leur enregistrement.
+  const [mouvementsModifies, setMouvementsModifies] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
   const [enCours, demarrer] = useTransition();
   const lecture = !inv.modifiable;
-  const initialVerrouille = lecture || !!inv.reprise;
   const m = inv.magasin!;
 
   useEffect(() => {
@@ -36,16 +52,41 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
     return () => window.removeEventListener("beforeunload", avertir);
   }, [modifie]);
 
-  const maj = (code: string, p: Partial<Ligne>) => {
-    setLignes((ls) => ls.map((l) => (l.codeArticle === code ? { ...l, ...p } : l)));
+  const maj = (code: string, colonne: Colonne, v: number | null) => {
+    setLignes((ls) => ls.map((l) => (l.codeArticle === code ? { ...l, [colonne]: v } : l)));
     setModifie(true);
+    if (colonne !== "stockFinalReel") setMouvementsModifies(true);
   };
+
+  const familles = useMemo(() => {
+    const parFamille = new Map<string, { total: number; saisis: number; aCompter: number }>();
+    for (const l of lignes) {
+      const f = parFamille.get(l.famille) ?? { total: 0, saisis: 0, aCompter: 0 };
+      f.total++;
+      if (ligneConcernee(l)) f.saisis++;
+      if (aCompter(l)) f.aCompter++;
+      parFamille.set(l.famille, f);
+    }
+    return [...parFamille].sort(([a], [b]) => a.localeCompare(b, "fr"));
+  }, [lignes]);
+
   const visibles = useMemo(() => {
     const f = filtre.trim().toLowerCase();
-    return lignes.filter((l) => (!f || `${l.codeArticle} ${l.designation} ${l.famille}`.toLowerCase().includes(f)) && (!seulementConcernees || ligneConcernee(l)));
-  }, [lignes, filtre, seulementConcernees]);
+    return lignes.filter(
+      (l) =>
+        (famille === TOUTES || l.famille === famille) &&
+        (!f || `${l.codeArticle} ${l.designation} ${l.famille}`.toLowerCase().includes(f)) &&
+        (vue === "tous" || (vue === "concernes" ? ligneConcernee(l) : aCompter(l))),
+    );
+  }, [lignes, filtre, famille, vue]);
   const erreurs = controlerInventaire(lignes);
   const concernees = lignes.filter(ligneConcernee).length;
+  const nbACompter = lignes.filter(aCompter).length;
+  const jamaisEnregistre = !inv.entete;
+  const clotureBloquee = enCours || jamaisEnregistre || mouvementsModifies || erreurs.length > 0 || concernees === 0;
+  const raisonBlocage = jamaisEnregistre || mouvementsModifies
+    ? "Enregistrez d'abord les réceptions, ventes et retours"
+    : erreurs.length ? "Saisissez le stock final réel de tous les articles concernés" : undefined;
 
   const enregistrer = (cloturer: boolean) =>
     demarrer(async () => {
@@ -54,12 +95,26 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
       setMessage({ ok: r.ok, texte: r.message });
       if (r.ok) {
         setModifie(false);
+        setMouvementsModifies(false);
         router.refresh();
       }
     });
 
+  const carteFamille = (cle: string, libelle: string, total: number, saisis: number, restants: number) => (
+    <button key={cle || "toutes"} type="button" onClick={() => setFamille(cle)} aria-pressed={famille === cle}
+      className={`flex min-h-16 flex-col items-start justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+        famille === cle ? "border-marque bg-marque text-white" : "border-slate-200 bg-white hover:border-marque"
+      }`}>
+      <span className="font-semibold">{libelle}</span>
+      <span className={famille === cle ? "text-white/85" : "text-slate-500"}>
+        {total} article(s) · {saisis} saisi(s)
+        {restants > 0 && <span className={`ml-1 font-semibold ${famille === cle ? "text-amber-200" : "text-amber-700"}`}>· {restants} à compter</span>}
+      </span>
+    </button>
+  );
+
   return (
-    <div className="flex flex-col gap-3 pb-24">
+    <div className="flex flex-col gap-3">
       <div className="carte flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <span>Société : <b>{m.societe}</b></span>
         <span>Magasin : <b>{m.libelle}</b></span>
@@ -81,38 +136,70 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           </ul>
         </div>
       )}
-      {inv.reprise && !lecture && <p className="note">Stock initial = stock final réel de l&apos;inventaire du {inv.reprise.date} (non modifiable).</p>}
-      {!inv.reprise && !lecture && <p className="note">Premier inventaire de ce magasin : saisissez le stock initial de chaque article présent.</p>}
+      {!lecture && (
+        <p className="note">
+          {inv.reprise ? <>Stock initial = stock final réel de l&apos;inventaire du {inv.reprise.date} (non modifiable).</> : <>Premier inventaire de ce magasin : stock initial à 0 ; le stock final réel compté aujourd&apos;hui deviendra le stock initial de demain.</>}
+          {" "}Étapes : 1. saisir réceptions, ventes et retours puis <b>Enregistrer</b> ; 2. compter le stock final réel puis <b>Clôturer</b>.
+        </p>
+      )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input className="champ min-w-72" placeholder="Rechercher code, désignation, famille" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
-        <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={seulementConcernees} onChange={(e) => setSeulementConcernees(e.target.checked)} /> Uniquement les articles avec stock ou mouvement</label>
-        <span className="note">{visibles.length} / {lignes.length} articles affichés</span>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="group" aria-label="Familles">
+        {carteFamille(TOUTES, "Toutes les familles", lignes.length, concernees, nbACompter)}
+        {familles.map(([f, c]) => carteFamille(f, f, c.total, c.saisis, c.aCompter))}
       </div>
 
-      <div className="carte overflow-x-auto p-0">
+      <div className="flex flex-wrap items-center gap-3">
+        <input className="champ min-w-72" placeholder="Rechercher code, désignation" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+        <div className="flex gap-1" role="group" aria-label="Articles affichés">
+          {([["tous", "Tous"], ["concernes", "Avec stock ou mouvement"], ["aCompter", `À compter (${nbACompter})`]] as const).map(([v, l]) => (
+            <button key={v} type="button" className={vue === v ? "btn" : "btn-secondaire"} aria-pressed={vue === v} onClick={() => setVue(v)}>{l}</button>
+          ))}
+        </div>
+        <span className="note">{visibles.length} / {lignes.length} articles affichés · Entrée = ligne suivante</span>
+      </div>
+
+      {message && <p className={message.ok ? "alerte-ok" : "alerte-erreur"}>{message.texte}</p>}
+
+      <div className="carte max-h-[70vh] overflow-auto p-0">
         <table className="tableau">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr>
               <th>Société</th><th>Magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th><th>Réceptions</th><th>Ventes</th><th>Retours</th><th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
             </tr>
+            {!lecture && (
+              <tr>
+                <th colSpan={5} className="text-xs font-normal text-slate-500">
+                  {modifie ? <span className="text-amber-700">Modifications non enregistrées</span> : raisonBlocage ? `Clôture : ${raisonBlocage.toLowerCase()}` : "Prêt à clôturer"}
+                </th>
+                <th colSpan={3}>
+                  <button className="btn w-full" disabled={enCours} onClick={() => enregistrer(false)}>
+                    {enCours ? "Enregistrement…" : "1. Enregistrer"}
+                  </button>
+                </th>
+                <th />
+                <th colSpan={2}>
+                  <button className="btn w-full bg-emerald-700 hover:bg-emerald-800" disabled={clotureBloquee} title={raisonBlocage} onClick={() => enregistrer(true)}>
+                    2. Clôturer
+                  </button>
+                </th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {visibles.map((l) => {
               const c = calculerLigneInventaire(l);
-              const aCompter = ligneConcernee(l) && l.stockFinalReel === null;
               return (
-                <tr key={l.codeArticle} className={aCompter ? "bg-amber-50" : ""}>
+                <tr key={l.codeArticle} className={aCompter(l) ? "bg-amber-50" : ""}>
                   <td className="text-slate-500">{m.societe}</td>
                   <td className="text-slate-500">{m.libelle}</td>
                   <td className="font-mono text-xs">{l.codeArticle}</td>
                   <td>{l.designation}<div className="note text-xs">{l.famille}</div></td>
-                  <td><Quantite label={`Stock initial ${l.codeArticle}`} valeur={l.stockInitial} verrouille={initialVerrouille} onChange={(v) => maj(l.codeArticle, { stockInitial: v })} /></td>
-                  <td><Quantite label={`Réceptions ${l.codeArticle}`} valeur={l.receptions} verrouille={lecture} onChange={(v) => maj(l.codeArticle, { receptions: v })} /></td>
-                  <td><Quantite label={`Ventes ${l.codeArticle}`} valeur={l.ventes} verrouille={lecture} onChange={(v) => maj(l.codeArticle, { ventes: v })} /></td>
-                  <td><Quantite label={`Retours ${l.codeArticle}`} valeur={l.retours} verrouille={lecture} onChange={(v) => maj(l.codeArticle, { retours: v })} /></td>
+                  <td><Quantite label={`Stock initial ${l.codeArticle}`} valeur={l.stockInitial} verrouille /></td>
+                  {MOUVEMENTS.map((k) => (
+                    <td key={k}><Quantite label={`${k} ${l.codeArticle}`} colonne={k} valeur={l[k]} verrouille={lecture} onChange={(v) => maj(l.codeArticle, k, v)} /></td>
+                  ))}
                   <td className="text-right tabular-nums">{fmt(c.stockFinalTheorique)}</td>
-                  <td><Quantite label={`Stock final réel ${l.codeArticle}`} valeur={l.stockFinalReel} verrouille={lecture} onChange={(v) => maj(l.codeArticle, { stockFinalReel: v })} /></td>
+                  <td><Quantite label={`Stock final réel ${l.codeArticle}`} colonne="stockFinalReel" valeur={l.stockFinalReel} verrouille={lecture} onChange={(v) => maj(l.codeArticle, "stockFinalReel", v)} /></td>
                   <td className={`text-right tabular-nums ${c.ecart ? "font-semibold text-red-700" : ""}`}>{fmt(c.ecart)}</td>
                 </tr>
               );
@@ -121,20 +208,10 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           </tbody>
         </table>
       </div>
-      <p className="note">Quantités en pièces. Théorique = initial + réceptions − ventes + retours. Les lignes surlignées ont du stock ou un mouvement mais pas encore de stock final réel.</p>
-
-      {message && <p className={message.ok ? "alerte-ok" : "alerte-erreur"}>{message.texte}</p>}
-      {!lecture && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 shadow">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-end gap-2">
-            {erreurs.length > 0 && <span className="note mr-auto text-amber-700">À compléter : {erreurs.join(" ; ")}</span>}
-            {modifie && !erreurs.length && <span className="note mr-auto">Modifications non enregistrées</span>}
-            <button className="btn-secondaire" disabled={enCours} onClick={() => enregistrer(false)}>{enCours ? "Enregistrement…" : "Enregistrer l'inventaire"}</button>
-            <button className="btn" disabled={enCours || erreurs.length > 0 || concernees === 0} title={erreurs.length ? "Comptez tous les articles concernés avant de clôturer" : undefined}
-              onClick={() => enregistrer(true)}>Clôturer l&apos;inventaire</button>
-          </div>
-        </div>
-      )}
+      <p className="note">
+        Quantités en pièces. Théorique = initial + réceptions − ventes + retours. Les lignes surlignées ont du stock ou un mouvement mais pas encore de stock final réel.
+        {!lecture && erreurs.length > 0 && <span className="text-amber-700"> À compléter avant clôture : {erreurs.join(" ; ")}.</span>}
+      </p>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { LIBELLES_ROLES, ROLES, type CodeRole } from "@/lib/constantes";
 import { seDeconnecter } from "../connexion/actions";
+import logoNeolia from "../connexion/logos/logo-neolia.jpg";
 
 const MENU: { href: string; libelle: string; roles?: CodeRole[]; saufRoles?: CodeRole[] }[] = [
   { href: "/demandes", libelle: "Demandes", saufRoles: [ROLES.AGENT_DEPOT] },
@@ -29,7 +30,15 @@ export default async function LayoutPortail({ children }: { children: React.Reac
     <>
       <header className="bg-marque text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <Link href="/" className="font-semibold">Approvisionnement inter-dépôts · Radès</Link>
+          <div className="flex items-center gap-3">
+            {/* Les dépôts sont exploités par Neolia Logistique : son logo accompagne l'espace des agents dépôt. */}
+            {u.role === ROLES.AGENT_DEPOT && (
+              <span className="rounded-md bg-[#f7f7f7] px-2 py-1">
+                <img src={logoNeolia.src} alt="Neolia Logistique" width={logoNeolia.width} height={logoNeolia.height} className="h-7 w-auto" />
+              </span>
+            )}
+            <Link href="/" className="font-semibold">Approvisionnement inter-dépôts · Radès</Link>
+          </div>
           <div className="flex items-center gap-3 text-sm">
             <span>{u.nomComplet} · {LIBELLES_ROLES[u.role]}</span>
             <form action={seDeconnecter}>

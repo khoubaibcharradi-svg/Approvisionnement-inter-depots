@@ -111,7 +111,8 @@ export async function chargerInventaire(agent: UtilisateurCourant, dateJournee: 
         codeArticle: a.codeArticle,
         designation: a.designation,
         famille: a.famille.libelle,
-        stockInitial: initialRepris ?? num(l?.stockInitial) ?? null,
+        // Jamais saisi par l'agent : stock final réel du dernier inventaire (0 pour un premier inventaire).
+        stockInitial: initialRepris ?? num(l?.stockInitial) ?? 0,
         receptions: num(l?.receptions),
         ventes: num(l?.ventes),
         retours: num(l?.retours),
@@ -155,12 +156,24 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
 
       const articles = new Map((await tx.article.findMany({ where: { codeArticle: { in: saisie.map((l) => l.codeArticle) } } })).map((a) => [a.codeArticle, a]));
       const precedent = await inventairePrecedent(tx, codeMagasin, dateJournee);
+      const anciennes = new Map((await tx.inventaireLigne.findMany({ where: cle })).map((l) => [l.codeArticle, l]));
+      // La clôture fige les mouvements déjà enregistrés : réceptions, ventes et retours doivent l'avoir été avant.
+      if (cloturer) {
+        const parCode = new Map(saisie.map((l) => [l.codeArticle, l]));
+        const codes = new Set([...parCode.keys(), ...anciennes.keys()]);
+        const change = [...codes].some((c) => {
+          const n = parCode.get(c), o = anciennes.get(c);
+          return (["receptions", "ventes", "retours"] as const).some((k) => (n?.[k] ?? 0) !== (num(o?.[k]) ?? 0));
+        });
+        if (!en || change) throw new ErreurCompteRendu("Enregistrez d'abord les réceptions, ventes et retours, puis clôturez l'inventaire.");
+      }
       const aGarder: string[] = [];
       for (const l of saisie) {
         const a = articles.get(l.codeArticle);
         if (!a) throw new ErreurCompteRendu(`Article inconnu : ${l.codeArticle}`);
-        // Continuité : le stock initial est toujours le stock final réel du dernier inventaire.
-        if (precedent) l.stockInitial = precedent.stock.get(l.codeArticle) ?? 0;
+        // Continuité : le stock initial n'est jamais saisi, c'est le stock final réel du dernier inventaire
+        // (pour un premier inventaire : la valeur déjà enregistrée, sinon 0).
+        l.stockInitial = precedent ? (precedent.stock.get(l.codeArticle) ?? 0) : (num(anciennes.get(l.codeArticle)?.stockInitial) ?? 0);
         if (!ligneConcernee(l)) continue;
         aGarder.push(l.codeArticle);
         const calc = calculerLigneInventaire(l);
