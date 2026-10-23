@@ -9,7 +9,7 @@ import { ROLES } from "@/lib/constantes";
 export type Resultat = { ok: boolean; message: string };
 
 export async function lancerSauvegarde(): Promise<Resultat> {
-  const u = await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+  const u = await exigerUtilisateur([ROLES.ADMIN_FULL]);
   try {
     const r = await sauvegarderBase(`manuelle · ${u.login}`);
     await auditer({ action: "SAUVEGARDE_MANUELLE", login: u.login, codeRole: u.role, entite: "Sauvegarde", cleEntite: r.fichier, apres: { octets: r.octets, sha256: r.sha256, lignes: r.lignes } });

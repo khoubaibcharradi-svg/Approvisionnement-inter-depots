@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "../prisma";
 import { auditer } from "../audit";
 import { NOM_COOKIE, dureeSessionSecondes, lireJeton, signerJeton } from "./jeton";
-import { ROLES_HORS_DEMANDES, accueilDuRole, type CodeRole } from "../constantes";
+import { ROLES, ROLES_HORS_DEMANDES, accueilDuRole, type CodeRole } from "../constantes";
 import type { Acteur } from "../workflow";
 
 export type UtilisateurCourant = Acteur & {
@@ -67,7 +67,9 @@ export async function exigerUtilisateur(
   const u = await utilisateurCourant();
   if (!u) redirect("/connexion");
   if (u.doitChangerMotDePasse && !options?.autoriserMdpExpire) redirect("/mot-de-passe?obligatoire=1");
-  const refuse = roles ? !roles.includes(u.role) : !options?.tousRoles && ROLES_HORS_DEMANDES.includes(u.role);
+  // ADMIN_FULL hérite de tout ce qui est ouvert à l'administrateur.
+  const autorise = (r: readonly CodeRole[]) => r.includes(u.role) || (u.role === ROLES.ADMIN_FULL && r.includes(ROLES.ADMINISTRATEUR));
+  const refuse = roles ? !autorise(roles) : !options?.tousRoles && ROLES_HORS_DEMANDES.includes(u.role);
   if (refuse) {
     await auditer({
       action: "ACCES_PAGE_REFUSE",
