@@ -153,32 +153,93 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
     </button>
   );
 
-  /** Cellule d'état d'une étape, sous l'en-tête de sa colonne. */
-  const celluleEtape = ({ etape, libelle, validees, codes: libelleCodes }: (typeof ETAPES)[number]) => {
+  const nbValidees = ETAPES.filter((e) => validee(e.etape)).length;
+  const cloture = inv.entete?.statut === "CLOTURE";
+  const progression = ((nbValidees + (cloture ? 1 : 0)) / (ETAPES.length + 1)) * 100;
+
+  /** Carte d'une étape : numéro, état, codes éventuels et action. */
+  const carteEtape = ({ etape, colonne, libelle, validees, codes: libelleCodes }: (typeof ETAPES)[number], numero: number) => {
     const v = validee(etape);
+    const total = lignes.reduce((t, l) => t + (l[colonne] ?? 0), 0);
     return (
-      <th key={etape} className={`min-w-36 align-top font-normal ${v ? "bg-emerald-50" : ""}`}>
-        <div className="flex flex-col gap-1.5">
-          {v ? (
-            <span className="text-xs font-semibold text-emerald-800">✓ {validees} · {v.login} · {heure(v.date)}</span>
-          ) : (
-            <span className="text-xs font-semibold text-amber-700">À valider</span>
-          )}
-          {libelleCodes && <Codes libelle={libelleCodes} codes={codes[etape as EtapeAvecCodes]} verrouille={lecture || !!v} onChange={(c) => majCodes(etape as EtapeAvecCodes, c)} />}
-          {!lecture && (v ? (
-            <button type="button" className="btn-secondaire w-full py-1 text-xs" disabled={enCours}
-              onClick={() => envoyer({ type: "ANNULER_VALIDATION", etape }, `Modifier les ${libelle.toLowerCase()} ? La colonne redevient modifiable et devra être validée de nouveau.`)}>
-              Modifier
-            </button>
-          ) : (
-            <button type="button" className="btn w-full py-1 text-xs" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape })}>
-              Valider les {libelle.toLowerCase()}
-            </button>
-          ))}
+      <li key={etape} className={`flex flex-col gap-3 rounded-xl border p-4 ${v ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
+        <div className="flex items-start gap-3">
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${v ? "bg-emerald-600 text-white" : "bg-marque-pale text-marque"}`} aria-hidden="true">
+            {v ? "✓" : numero}
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900">{libelle}</p>
+            {v ? (
+              <p className="text-xs text-emerald-800">{validees} par {v.login} à {heure(v.date)}</p>
+            ) : (
+              <p className="text-xs text-amber-700">À valider · {fmt(total)} pièce(s) saisie(s)</p>
+            )}
+          </div>
         </div>
-      </th>
+        {libelleCodes && <Codes libelle={libelleCodes} codes={codes[etape as EtapeAvecCodes]} verrouille={lecture || !!v} onChange={(c) => majCodes(etape as EtapeAvecCodes, c)} />}
+        {!lecture && (
+          <div className="mt-auto">
+            {v ? (
+              <button type="button" className="btn-secondaire w-full" disabled={enCours}
+                onClick={() => envoyer({ type: "ANNULER_VALIDATION", etape }, `Modifier les ${libelle.toLowerCase()} ? La colonne redevient modifiable et devra être validée de nouveau.`)}>
+                Modifier
+              </button>
+            ) : (
+              <button type="button" className="btn w-full" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape })}>
+                Valider les {libelle.toLowerCase()}
+              </button>
+            )}
+          </div>
+        )}
+      </li>
     );
   };
+
+  const panneauEtapes = inv.etapes && (
+    <section className="carte flex flex-col gap-4" aria-label="Étapes de l'inventaire">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Étapes de l&apos;inventaire</h2>
+          <p className="note">
+            {nbValidees}/{ETAPES.length} étapes validées
+            {!lecture && <> · {modifie ? <span className="font-medium text-amber-700">modifications non enregistrées</span> : "tout est enregistré"}</>}
+          </p>
+        </div>
+        {!lecture && (
+          <button type="button" className="btn-secondaire" disabled={enCours} onClick={() => envoyer({ type: "BROUILLON" })}>
+            {enCours ? "Enregistrement…" : "Enregistrer le brouillon"}
+          </button>
+        )}
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Avancement" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progression)}>
+        <div className="h-full rounded-full bg-marque transition-all" style={{ width: `${progression}%` }} />
+      </div>
+      <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {ETAPES.map((e, i) => carteEtape(e, i + 1))}
+        <li className={`flex flex-col gap-3 rounded-xl border p-4 ${cloture ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
+          <div className="flex items-start gap-3">
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${cloture ? "bg-emerald-600 text-white" : "bg-marque-pale text-marque"}`} aria-hidden="true">
+              {cloture ? "✓" : ETAPES.length + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900">Stock réel et clôture</p>
+              <p className={`text-xs ${cloture ? "text-emerald-800" : raisonBlocage ? "text-slate-500" : "font-semibold text-emerald-800"}`}>
+                {cloture ? `Clôturé par ${inv.entete!.loginCloture}` : raisonBlocage ? `Pour clôturer : ${raisonBlocage}` : "Prêt à clôturer"}
+              </p>
+            </div>
+          </div>
+          {!lecture && (
+            <div className="mt-auto">
+              <button type="button" className="btn w-full bg-emerald-700 hover:bg-emerald-800" disabled={enCours || !!raisonBlocage}
+                onClick={() => envoyer({ type: "CLOTURER" }, "Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")}>
+                Clôturer l&apos;inventaire
+              </button>
+            </div>
+          )}
+        </li>
+      </ol>
+    </section>
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -206,9 +267,12 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
       {!lecture && (
         <p className="note">
           {inv.reprise ? <>Stock initial = stock final réel de l&apos;inventaire du {inv.reprise.date} (non modifiable).</> : <>Premier inventaire de ce magasin : stock initial à 0 ; le stock final réel compté aujourd&apos;hui deviendra le stock initial de demain.</>}
-          {" "}Validez les réceptions (avec leurs codes), les ventes et les retours (avec leurs codes), puis saisissez le stock final réel et clôturez.
         </p>
       )}
+
+      {panneauEtapes}
+
+      {message && <p className={message.ok ? "alerte-ok" : "alerte-erreur"}>{message.texte}</p>}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="group" aria-label="Familles">
         {carteFamille(TOUTES, "Toutes les familles", lignes.length, concernees, nbACompter)}
@@ -225,43 +289,15 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
         <span className="note">{visibles.length} / {lignes.length} articles affichés · Entrée = ligne suivante</span>
       </div>
 
-      {message && <p className={message.ok ? "alerte-ok" : "alerte-erreur"}>{message.texte}</p>}
 
       <div className="carte max-h-[75vh] overflow-auto p-0">
         <table className="tableau">
           <thead className="sticky top-0 z-10">
             <tr>
               <th>Société / magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th>
-              {ETAPES.map((e) => <th key={e.etape}>{e.libelle}</th>)}
+              {ETAPES.map((e) => <th key={e.etape}>{e.libelle}{validee(e.etape) && <span className="ml-1 text-emerald-600" title="Validées : colonne figée">✓</span>}</th>)}
               <th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
             </tr>
-            {inv.etapes && (
-              <tr>
-                <th colSpan={4} className="align-top font-normal">
-                  {!lecture && (
-                    <div className="flex flex-col items-start gap-1.5">
-                      <span className={`text-xs ${modifie ? "text-amber-700" : "text-slate-500"}`}>{modifie ? "Modifications non enregistrées" : "Tout est enregistré"}</span>
-                      <button type="button" className="btn-secondaire py-1 text-xs" disabled={enCours} onClick={() => envoyer({ type: "BROUILLON" })}>
-                        {enCours ? "Enregistrement…" : "Enregistrer le brouillon"}
-                      </button>
-                    </div>
-                  )}
-                </th>
-                {ETAPES.map(celluleEtape)}
-                <th />
-                <th colSpan={2} className="align-top font-normal">
-                  {!lecture && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className={`text-xs ${raisonBlocage ? "text-slate-500" : "font-semibold text-emerald-800"}`}>{raisonBlocage ? `Clôture : ${raisonBlocage}` : "Prêt à clôturer"}</span>
-                      <button type="button" className="btn w-full bg-emerald-700 py-1 text-xs hover:bg-emerald-800" disabled={enCours || !!raisonBlocage}
-                        onClick={() => envoyer({ type: "CLOTURER" }, "Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")}>
-                        Clôturer l&apos;inventaire
-                      </button>
-                    </div>
-                  )}
-                </th>
-              </tr>
-            )}
           </thead>
           <tbody>
             {visibles.map((l) => {
