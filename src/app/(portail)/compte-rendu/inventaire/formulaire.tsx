@@ -32,7 +32,7 @@ function suivant(e: React.KeyboardEvent<HTMLInputElement>) {
 function Quantite({ valeur, onChange, verrouille, label, colonne }: { valeur: number | null; onChange?: (v: number | null) => void; verrouille: boolean; label: string; colonne?: Colonne }) {
   return (
     <input type="number" inputMode="decimal" step="any" min={0} disabled={verrouille} aria-label={label} data-col={colonne}
-      className={`champ w-24 text-right ${verrouille ? "bg-slate-100 text-slate-600" : ""}`}
+      className={`champ w-20 px-2 text-right ${verrouille ? "bg-slate-100 text-slate-600" : ""}`}
       value={valeur ?? ""} onKeyDown={suivant} onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => onChange?.(e.target.value === "" ? null : Number(e.target.value))} />
   );
@@ -157,7 +157,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const celluleEtape = ({ etape, libelle, validees, codes: libelleCodes }: (typeof ETAPES)[number]) => {
     const v = validee(etape);
     return (
-      <th key={etape} className={`min-w-40 align-top font-normal ${v ? "bg-emerald-50" : ""}`}>
+      <th key={etape} className={`min-w-36 align-top font-normal ${v ? "bg-emerald-50" : ""}`}>
         <div className="flex flex-col gap-1.5">
           {v ? (
             <span className="text-xs font-semibold text-emerald-800">✓ {validees} · {v.login} · {heure(v.date)}</span>
@@ -231,13 +231,13 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
         <table className="tableau">
           <thead className="sticky top-0 z-10">
             <tr>
-              <th>Société</th><th>Magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th>
+              <th>Société / magasin</th><th>Code article</th><th>Désignation</th><th>Stock initial</th>
               {ETAPES.map((e) => <th key={e.etape}>{e.libelle}</th>)}
               <th>Stock final théorique</th><th>Stock final réel</th><th>Écart</th>
             </tr>
             {inv.etapes && (
               <tr>
-                <th colSpan={5} className="align-top font-normal">
+                <th colSpan={4} className="align-top font-normal">
                   {!lecture && (
                     <div className="flex flex-col items-start gap-1.5">
                       <span className={`text-xs ${modifie ? "text-amber-700" : "text-slate-500"}`}>{modifie ? "Modifications non enregistrées" : "Tout est enregistré"}</span>
@@ -268,8 +268,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
               const c = calculerLigneInventaire(l);
               return (
                 <tr key={l.codeArticle} className={aCompter(l) ? "bg-amber-50" : ""}>
-                  <td className="text-slate-500">{m.societe}</td>
-                  <td className="text-slate-500">{m.libelle}</td>
+                  <td className="text-xs text-slate-500"><span className="font-medium text-slate-700">{m.societe}</span><br />{m.libelle}</td>
                   <td className="font-mono text-xs">{l.codeArticle}</td>
                   <td>{l.designation}<div className="note text-xs">{l.famille}</div></td>
                   <td><Quantite label={`Stock initial ${l.codeArticle}`} valeur={l.stockInitial} verrouille /></td>
@@ -284,7 +283,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
                 </tr>
               );
             })}
-            {!visibles.length && <tr><td colSpan={11} className="note py-4 text-center">Aucun article.</td></tr>}
+            {!visibles.length && <tr><td colSpan={10} className="note py-4 text-center">Aucun article.</td></tr>}
           </tbody>
         </table>
       </div>

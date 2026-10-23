@@ -26,7 +26,7 @@ export default async function PageCompteRendu({ searchParams }: { searchParams: 
       {p.date && p.date !== date && <p className="alerte-erreur">La journée du {p.date} n&apos;est plus ouverte à la saisie.</p>}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Compte rendu journalier — dépôt {journee.depot.libelle}</h1>
+          <h1 className="titre-page">Compte rendu journalier — dépôt {journee.depot.libelle}</h1>
           <p className="note">ENR-08 · Montants au coût de revient, en dinars (3 décimales).</p>
         </div>
         <nav className="flex flex-wrap gap-1" aria-label="Journée">

@@ -19,7 +19,7 @@ export default async function PageInventaire({ searchParams }: { searchParams: P
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Inventaire journalier (quantités en pièces)</h1>
+          <h1 className="titre-page">Inventaire journalier (quantités en pièces)</h1>
           <p className="note">Une fois l&apos;inventaire enregistré, la « situation du stock » du <Link className="underline" href={`/compte-rendu?date=${date}`}>compte rendu</Link> se remplit automatiquement (valorisation au coût de revient).</p>
         </div>
         <nav className="flex flex-wrap gap-1" aria-label="Journée">

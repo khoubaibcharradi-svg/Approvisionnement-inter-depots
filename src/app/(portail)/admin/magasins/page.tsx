@@ -13,7 +13,7 @@ export default async function PageMagasins() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">Magasins des dépôts</h1>
+        <h1 className="titre-page">Magasins des dépôts</h1>
         <p className="note">Chaque magasin appartient à un dépôt et à une société. Les magasins actifs d&apos;un dépôt forment les lignes « situation du stock » de son compte rendu journalier.</p>
       </div>
       <GestionMagasins

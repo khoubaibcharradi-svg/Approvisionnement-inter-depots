@@ -13,7 +13,7 @@ export default async function PageSauvegardes() {
   return (
     <div className="flex flex-col gap-4">
       <div className="carte flex flex-col gap-2">
-        <h1 className="text-lg font-semibold">Sauvegardes de la base</h1>
+        <h1 className="titre-page">Sauvegardes de la base</h1>
         <p className="note">
           Sauvegarde texte automatique chaque jour à {process.env.BACKUP_HEURE || "02:00"}
           {process.env.BACKUP_AUTO === "false" ? " (désactivée ici : planifiée par le cron système)" : ""}, conservée {process.env.BACKUP_RETENTION_JOURS || 90} jours.

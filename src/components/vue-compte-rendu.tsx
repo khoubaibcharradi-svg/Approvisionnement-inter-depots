@@ -72,7 +72,7 @@ export function VueCompteRendu({ cr, societes, inventaire = [] }: { cr: Detail; 
     <div className="flex flex-col gap-4">
       <div className="carte flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold">{cr.numero} · dépôt {cr.depot} · {new Date(`${cr.dateJournee}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h1>
+          <h1 className="titre-page">{cr.numero} · dépôt {cr.depot} · {new Date(`${cr.dateJournee}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h1>
           <p className="note">Agent : {cr.agent} · {cr.statut === "SOUMIS" ? `soumis le ${cr.dateSoumission?.toLocaleString("fr-FR")}` : `brouillon, dernière modification le ${cr.dateModification.toLocaleString("fr-FR")}`}</p>
         </div>
         <span className={`badge ${cr.statut === "SOUMIS" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{cr.statut === "SOUMIS" ? "Soumis" : "Brouillon"}</span>

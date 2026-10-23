@@ -55,8 +55,8 @@ export default async function PageComptesRendus({ searchParams }: { searchParams
     <div className="flex flex-col gap-4">
       {p.mdp && <p className="alerte-ok">Mot de passe modifié.</p>}
       {p.refus && <p className="alerte-erreur">Accès refusé : cette page n&apos;est pas ouverte à votre profil.</p>}
-      <h1 className="text-lg font-semibold">Comptes rendus journaliers des dépôts</h1>
-      <form className="carte grid gap-3 sm:grid-cols-3 lg:grid-cols-7 lg:items-end">
+      <h1 className="titre-page">Comptes rendus journaliers des dépôts</h1>
+      <form className="carte grid gap-3 sm:grid-cols-3 lg:grid-cols-6 lg:items-end">
         <label className="etiquette">Date début<input type="date" name="du" defaultValue={f.du} className="champ" /></label>
         <label className="etiquette">Date fin<input type="date" name="au" defaultValue={f.au} className="champ" /></label>
         <label className="etiquette">Dépôt
@@ -71,7 +71,7 @@ export default async function PageComptesRendus({ searchParams }: { searchParams
         <label className="etiquette">Statut
           <select name="statut" defaultValue={f.statut} className="champ"><option value="">Tous</option><option value="SOUMIS">Soumis</option><option value="BROUILLON">Brouillon</option></select>
         </label>
-        <div className="flex gap-2"><button className="btn">Filtrer</button><Link href="/admin/comptes-rendus" className="btn-secondaire">Réinitialiser</Link></div>
+        <div className="flex gap-2 sm:col-span-3 lg:col-span-6 lg:justify-end"><button className="btn">Filtrer</button><Link href="/admin/comptes-rendus" className="btn-secondaire">Réinitialiser</Link></div>
       </form>
 
       {sansCompteRendu.length > 0 && (

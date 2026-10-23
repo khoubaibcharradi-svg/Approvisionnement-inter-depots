@@ -13,7 +13,7 @@ export default async function PageVehicules() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold">Véhicules</h1>
+        <h1 className="titre-page">Véhicules</h1>
         <p className="note">Chaque véhicule est rattaché à une agence (magasin), donc à un dépôt et à une société. Les agents d&apos;un dépôt choisissent les véhicules traités dans cette liste.</p>
       </div>
       <GestionVehicules
