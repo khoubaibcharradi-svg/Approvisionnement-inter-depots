@@ -314,7 +314,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
         },
         tx,
       );
-      return { articles: aGarder.length, erreurs, action: action.type, etape: "etape" in action ? action.etape : null };
+      return { articles: aGarder.length, erreurs, action: action.type, etape: "etape" in action ? action.etape : null, magasin: magasin.code, libelleMagasin: magasin.libelle };
     },
     { timeout: 60_000 },
   );

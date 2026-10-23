@@ -84,12 +84,28 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
   const m = inv.magasin!;
   const validee = (e: Etape) => inv.etapes?.[e].validee ?? null;
 
+  const nomMagasin = `${m.societe} · ${m.libelle}`;
+
+  // Saisie non enregistrée : on prévient avant de quitter la page, y compris en changeant de magasin
+  // ou de journée (navigation interne, que « beforeunload » ne voit pas).
   useEffect(() => {
     if (!modifie) return;
     const avertir = (e: BeforeUnloadEvent) => e.preventDefault();
+    const lien = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest("a[href]");
+      if (!a || a.getAttribute("target") === "_blank") return;
+      if (!confirm(`Des quantités saisies pour ${nomMagasin} ne sont pas enregistrées. Quitter sans enregistrer ?`)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
     window.addEventListener("beforeunload", avertir);
-    return () => window.removeEventListener("beforeunload", avertir);
-  }, [modifie]);
+    document.addEventListener("click", lien, true);
+    return () => {
+      window.removeEventListener("beforeunload", avertir);
+      document.removeEventListener("click", lien, true);
+    };
+  }, [modifie, nomMagasin]);
 
   const maj = (code: string, colonne: Colonne, v: number | null) => {
     setLignes((ls) => ls.map((l) => (l.codeArticle === code ? { ...l, [colonne]: v } : l)));
@@ -133,6 +149,11 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
     demarrer(async () => {
       if (confirmation && !confirm(confirmation)) return;
       const r = await enregistrerInventaire(inv.dateJournee, m.code, lignes.filter(ligneConcernee), action, codes);
+      // Le serveur confirme le magasin réellement enregistré : il doit être celui affiché.
+      if (r.ok && r.magasin !== m.code) {
+        setMessage({ ok: false, texte: `Incohérence : l'enregistrement concerne ${r.magasin} au lieu de ${m.code}. Rechargez la page.` });
+        return;
+      }
       setMessage({ ok: r.ok, texte: r.message });
       if (r.ok) {
         setModifie(false);
@@ -185,7 +206,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
                 Modifier
               </button>
             ) : (
-              <button type="button" className="btn w-full" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape })}>
+              <button type="button" className="btn w-full" disabled={enCours} onClick={() => envoyer({ type: "VALIDER", etape }, `Valider les ${libelle.toLowerCase()} de ${nomMagasin} (${fmt(total)} pièce(s)) ?`)}>
                 Valider les {libelle.toLowerCase()}
               </button>
             )}
@@ -199,7 +220,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
     <section className="carte flex flex-col gap-4" aria-label="Étapes de l'inventaire">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Étapes de l&apos;inventaire</h2>
+          <h2 className="text-base font-semibold text-slate-900">Étapes de l&apos;inventaire · <span className="text-marque">{nomMagasin}</span></h2>
           <p className="note">
             {nbValidees}/{ETAPES.length} étapes validées
             {!lecture && <> · {modifie ? <span className="font-medium text-amber-700">modifications non enregistrées</span> : "tout est enregistré"}</>}
@@ -231,7 +252,7 @@ export function FormulaireInventaire({ inventaire: inv }: { inventaire: Inventai
           {!lecture && (
             <div className="mt-auto">
               <button type="button" className="btn w-full bg-emerald-700 hover:bg-emerald-800" disabled={enCours || !!raisonBlocage}
-                onClick={() => envoyer({ type: "CLOTURER" }, "Clôturer l'inventaire ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).")}>
+                onClick={() => envoyer({ type: "CLOTURER" }, `Clôturer l'inventaire de ${nomMagasin} ? Les quantités ne seront plus modifiables (réouverture possible uniquement par l'administrateur).`)}>
                 Clôturer l&apos;inventaire
               </button>
             </div>
