@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { EtapeInventaire, Prisma } from "@prisma/client";
 import { prisma, champsSuppression, type Transaction } from "../prisma";
 import { auditer } from "../audit";
-import { ROLES } from "../constantes";
+import { ROLES, estAdministrateur } from "../constantes";
 import type { UtilisateurCourant } from "../auth/session";
 import { calculerLigneInventaire, controlerInventaire, ligneConcernee, valoriserInventaire, type SaisieInventaire } from "./calculs";
 import { ErreurCompteRendu, journeesAccessibles } from "./service";
@@ -332,7 +332,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
  * Si le compte rendu de la journée était soumis, il repasse en brouillon pour être corrigé puis resoumis.
  */
 export async function rouvrirInventaire(admin: UtilisateurCourant, codeMagasin: string, dateJournee: string, motif: string) {
-  if (admin.role !== ROLES.ADMINISTRATEUR) throw new ErreurCompteRendu("Réservé à l'administrateur.");
+  if (!estAdministrateur(admin.role)) throw new ErreurCompteRendu("Réservé à l'administrateur.");
   const m = motif.trim();
   if (m.length < 10) throw new ErreurCompteRendu("Motif obligatoire (10 caractères au moins).");
   return prisma.$transaction(async (tx) => {

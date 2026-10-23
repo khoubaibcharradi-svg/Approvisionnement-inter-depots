@@ -7,7 +7,7 @@ import { auditer } from "@/lib/audit";
 import { journal } from "@/lib/journal";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { messagePublic } from "@/lib/erreurs";
-import { ROLES } from "@/lib/constantes";
+import { ROLES, estAdministrateur } from "@/lib/constantes";
 import { prochainNumero } from "@/lib/compteur";
 import { codeMetier, lireNombre, lireTableur, sansEntete } from "@/lib/tableur";
 import { quotaPlafonne } from "@/lib/workflow";
@@ -38,10 +38,10 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
     await auditer({ action: "ARTICLE_MAJ_REFUSEE", login: u.login, codeRole: u.role, entite: "Article", cleEntite: s.codeArticle, detail: `champ ${champ} non autorisé`, succes: false });
     return { ok: false, message: `Modification du champ « ${champ} » non autorisée pour votre profil.` };
   };
-  if ((s.nouveauCode !== undefined || s.isActif !== undefined) && !ROLES_CODES.includes(u.role as (typeof ROLES_CODES)[number])) return refus("code SKU");
+  if ((s.nouveauCode !== undefined || s.isActif !== undefined) && !(u.role === ROLES.DIRECTEUR_COMMERCIAL || estAdministrateur(u.role))) return refus("code SKU");
   if ((s.pcb !== undefined || s.stockPieces !== undefined) && u.role !== ROLES.DIRECTEUR_LOGISTIQUE) return refus("PCB / stock");
   if (s.quotaPieces !== undefined && u.role !== ROLES.DIRECTEUR_COMMERCIAL) return refus("quota");
-  if (s.prixRevient !== undefined && u.role !== ROLES.DIRECTEUR_LOGISTIQUE && u.role !== ROLES.ADMINISTRATEUR) return refus("prix de revient");
+  if (s.prixRevient !== undefined && u.role !== ROLES.DIRECTEUR_LOGISTIQUE && !estAdministrateur(u.role)) return refus("prix de revient");
 
   try {
     const message = await prisma.$transaction(async (tx) => {

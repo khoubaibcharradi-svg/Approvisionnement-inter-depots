@@ -1,5 +1,5 @@
 import type { StatutDemande, Unite } from "@prisma/client";
-import { ROLES, ROLES_HORS_DEMANDES, type CodeRole } from "./constantes";
+import { ROLES, ROLES_HORS_DEMANDES, estAdministrateur, type CodeRole } from "./constantes";
 
 /**
  * Règles de gestion du workflow (cahier des charges §4), sans accès à la base :
@@ -109,7 +109,7 @@ export function peutDemanderModification(a: Acteur, d: EtatDemande) {
   return (
     peutVoir(a, d) &&
     !d.modificationEnAttente &&
-    a.role !== ROLES.ADMINISTRATEUR &&
+    !estAdministrateur(a.role) &&
     det !== null &&
     det !== a.role &&
     !peutModifier(a, d)

@@ -6,6 +6,7 @@ export const ROLES = {
   DIRECTEUR_LOGISTIQUE: "DIRECTEUR_LOGISTIQUE",
   CHEF_DEPOT: "CHEF_DEPOT",
   ADMINISTRATEUR: "ADMINISTRATEUR",
+  ADMIN_FULL: "ADMIN_FULL",
   AGENT_DEPOT: "AGENT_DEPOT",
   CONSULTANT_CR: "CONSULTANT_CR",
 } as const;
@@ -17,7 +18,13 @@ export type CodeRole = (typeof ROLES)[keyof typeof ROLES];
 export const ROLES_HORS_DEMANDES: readonly CodeRole[] = [ROLES.AGENT_DEPOT, ROLES.CONSULTANT_CR];
 
 /** Rôles qui consultent les comptes rendus de tous les dépôts (lecture seule pour le consultant). */
-export const ROLES_LECTURE_COMPTES_RENDUS: CodeRole[] = [ROLES.ADMINISTRATEUR, ROLES.CONSULTANT_CR];
+export const ROLES_LECTURE_COMPTES_RENDUS: CodeRole[] = [ROLES.ADMINISTRATEUR, ROLES.ADMIN_FULL, ROLES.CONSULTANT_CR];
+
+/**
+ * ADMIN_FULL (administrateur IT) a tous les droits de l'administrateur, plus l'exploitation :
+ * sauvegardes, journaux techniques et tableau de bord IT, qui lui sont réservés.
+ */
+export const estAdministrateur = (role: string) => role === ROLES.ADMINISTRATEUR || role === ROLES.ADMIN_FULL;
 
 /** Page d'accueil selon le rôle. */
 export const accueilDuRole = (role: CodeRole) =>
@@ -29,6 +36,7 @@ export const accueilDuRole = (role: CodeRole) =>
 /** Rôles qui voient le stock et les quotas. */
 export const ROLES_VOIENT_STOCK: readonly string[] = [
   ROLES.ADMINISTRATEUR,
+  ROLES.ADMIN_FULL,
   ROLES.DIRECTEUR_COMMERCIAL,
   ROLES.DIRECTEUR_LOGISTIQUE,
   ROLES.CHEF_DEPOT,
