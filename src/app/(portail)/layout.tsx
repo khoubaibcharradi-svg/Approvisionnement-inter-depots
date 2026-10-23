@@ -1,5 +1,6 @@
 import { exigerUtilisateur } from "@/lib/auth/session";
-import { LIBELLES_ROLES, ROLES, type CodeRole } from "@/lib/constantes";
+import { ROLES, type CodeRole } from "@/lib/constantes";
+import { libellesRoles } from "@/lib/roles";
 import { Navigation, type EntreeMenu } from "./navigation";
 import logoNeolia from "../connexion/logos/logo-neolia.jpg";
 import logoPromofood from "../connexion/logos/logo-promofood.jpg";
@@ -35,7 +36,7 @@ export default async function LayoutPortail({ children }: { children: React.Reac
     <div className={neolia ? "theme-neolia" : undefined}>
       <Navigation
         menu={menu}
-        utilisateur={{ nom: u.nomComplet, role: LIBELLES_ROLES[u.role] }}
+        utilisateur={{ nom: u.nomComplet, role: (await libellesRoles())[u.role] }}
         logo={{ src: logo.src, alt: neolia ? "Neolia Logistique" : "Promofood", largeur: logo.width, hauteur: logo.height }}
       />
       <main className="lg:pl-64">
