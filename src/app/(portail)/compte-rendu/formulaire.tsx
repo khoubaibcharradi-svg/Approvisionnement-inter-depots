@@ -98,6 +98,8 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
         if (r.ok) {
           setModifie(false);
           router.refresh();
+          // Compte rendu envoyé : on remonte en haut de page, où s'affiche « Mission accomplie ».
+          if (soumettre) window.scrollTo({ top: 0, behavior: "smooth" });
         }
         fin(r.ok);
       }),
