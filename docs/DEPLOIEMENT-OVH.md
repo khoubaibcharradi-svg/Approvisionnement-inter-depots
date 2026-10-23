@@ -224,6 +224,7 @@ sudo bash /opt/appro/deploy/durcissement.sh
 | Refus des accès sans le bon nom | `nginx-defaut.conf` | Accès par l'adresse IP ou un nom inconnu → connexion fermée, sans certificat présenté |
 | Bannissement automatique | `fail2ban/appro.conf` | SSH (5 échecs), dépassements de débit, scanners, **échecs de connexion au portail** (8 en 15 min → 2 h de bannissement, plus long en cas de récidive) |
 | Pare-feu et noyau | `durcissement.sh` | SSH limité par UFW ; SYN cookies, anti-usurpation d'adresse, redirections ICMP refusées |
+| Confinement du service | `systemd-durcissement.conf` | Le processus Node.js n'a aucun privilège, ni accès à /home, aux périphériques ou au noyau (retiré automatiquement si le portail ne redémarre pas) |
 
 Vérifications :
 

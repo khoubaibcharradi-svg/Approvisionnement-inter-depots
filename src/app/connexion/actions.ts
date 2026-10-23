@@ -30,18 +30,32 @@ export async function seConnecter(_: EtatConnexion, form: FormData): Promise<Eta
     await verificationFactice(motDePasse);
     return echec(`compte verrouillé jusqu'à ${u.verrouilleJusqua.toISOString()}`);
   }
-  if (!(await verifierMotDePasse(motDePasse, u.motDePasseHash))) {
-    const max = await parametreNombre("MAX_ECHECS_CONNEXION");
-    const echecs = u.nbEchecsConnexion + 1;
-    const verrouiller = echecs >= max;
-    await prisma.utilisateur.update({
-      where: { login },
-      data: verrouiller
-        ? { nbEchecsConnexion: 0, verrouilleJusqua: new Date(Date.now() + (await parametreNombre("DUREE_VERROUILLAGE_MINUTES")) * 60_000) }
-        : { nbEchecsConnexion: echecs },
+  // Tentative comptée avant la vérification, dans une transaction (verrou de ligne) : des essais
+  // lancés en parallèle reçoivent chacun un numéro distinct et ne peuvent pas dépasser le seuil.
+  const max = await parametreNombre("MAX_ECHECS_CONNEXION");
+  const duree = await parametreNombre("DUREE_VERROUILLAGE_MINUTES");
+  const verrouiller = (tx: Pick<typeof prisma, "utilisateur"> = prisma) =>
+    tx.utilisateur.update({ where: { login }, data: { nbEchecsConnexion: 0, verrouilleJusqua: new Date(Date.now() + duree * 60_000) } });
+  const tentative = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.utilisateur.updateMany({
+      where: { login, OR: [{ verrouilleJusqua: null }, { verrouilleJusqua: { lte: new Date() } }] },
+      data: { nbEchecsConnexion: { increment: 1 } },
     });
-    if (verrouiller) await auditer({ action: "COMPTE_VERROUILLE", login, codeRole: u.codeRole, entite: "Utilisateur", cleEntite: login, succes: false });
-    return echec(`mot de passe incorrect (${echecs}/${max})`);
+    if (!count) return null; // verrouillé entre-temps par une requête concurrente
+    const n = (await tx.utilisateur.findUniqueOrThrow({ where: { login }, select: { nbEchecsConnexion: true } })).nbEchecsConnexion;
+    if (n > max) await verrouiller(tx); // seuil déjà atteint : verrouillage sans vérifier le mot de passe
+    return n;
+  });
+  if (tentative === null || tentative > max) {
+    await verificationFactice(motDePasse);
+    return echec(tentative === null ? "compte verrouillé par une tentative simultanée" : `tentative au-delà du seuil (${tentative}/${max})`);
+  }
+  if (!(await verifierMotDePasse(motDePasse, u.motDePasseHash))) {
+    if (tentative >= max) {
+      await verrouiller();
+      await auditer({ action: "COMPTE_VERROUILLE", login, codeRole: u.codeRole, entite: "Utilisateur", cleEntite: login, succes: false });
+    }
+    return echec(`mot de passe incorrect (${tentative}/${max})`);
   }
 
   await prisma.utilisateur.update({
