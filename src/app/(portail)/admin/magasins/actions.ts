@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma, champsSuppression } from "@/lib/prisma";
 import { auditer } from "@/lib/audit";
 import { exigerUtilisateur } from "@/lib/auth/session";
+import { messagePublic } from "@/lib/erreurs";
 import { ROLES } from "@/lib/constantes";
 import { codeMetier } from "@/lib/tableur";
 
@@ -22,7 +23,7 @@ async function executer(f: () => Promise<Resultat>): Promise<Resultat> {
     return r;
   } catch (e) {
     if (e instanceof z.ZodError) return { ok: false, message: e.issues[0]?.message ?? "Saisie invalide" };
-    return { ok: false, message: e instanceof Error ? e.message : "Erreur" };
+    return { ok: false, message: messagePublic(e, "Magasins") };
   }
 }
 

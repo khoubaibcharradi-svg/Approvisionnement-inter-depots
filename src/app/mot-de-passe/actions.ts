@@ -18,7 +18,18 @@ export async function changerMotDePasse(_: EtatMotDePasse, form: FormData): Prom
   const u = await prisma.utilisateur.findUniqueOrThrow({ where: { login: moi.login } });
 
   if (!(await verifierMotDePasse(actuel, u.motDePasseHash))) {
-    await auditer({ action: "MDP_CHANGEMENT_ECHEC", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: moi.login, detail: "mot de passe actuel incorrect", succes: false });
+    // Une session volée ne doit pas permettre de deviner le mot de passe : verrouillage comme à la connexion.
+    const max = await parametreNombre("MAX_ECHECS_CONNEXION");
+    const echecs = u.nbEchecsConnexion + 1;
+    const verrouiller = echecs >= max;
+    await prisma.utilisateur.update({
+      where: { login: moi.login },
+      data: verrouiller
+        ? { nbEchecsConnexion: 0, verrouilleJusqua: new Date(Date.now() + (await parametreNombre("DUREE_VERROUILLAGE_MINUTES")) * 60_000), versionSession: { increment: 1 } }
+        : { nbEchecsConnexion: echecs },
+    });
+    await auditer({ action: verrouiller ? "COMPTE_VERROUILLE" : "MDP_CHANGEMENT_ECHEC", login: moi.login, codeRole: moi.role, entite: "Utilisateur", cleEntite: moi.login, detail: `mot de passe actuel incorrect (${echecs}/${max})`, succes: false });
+    if (verrouiller) redirect("/connexion");
     return { erreur: "Mot de passe actuel incorrect." };
   }
   const regles = controlerPolitique(nouveau, moi.login, await parametreNombre("MDP_LONGUEUR_MIN"));
@@ -32,6 +43,7 @@ export async function changerMotDePasse(_: EtatMotDePasse, form: FormData): Prom
       motDePasseHash: await hacherMotDePasse(nouveau),
       doitChangerMotDePasse: false,
       dateChangementMotDePasse: new Date(),
+      nbEchecsConnexion: 0,
       versionSession: { increment: 1 },
       modifiePar: moi.login,
     },
