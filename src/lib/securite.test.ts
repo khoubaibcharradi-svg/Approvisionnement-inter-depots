@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { contenuConforme } from "./fichiers";
 import { lireJeton, prolongerJeton, signerJeton } from "./auth/jeton";
+import { controlerPolitique } from "./auth/mot-de-passe";
 
 const octets = (...b: number[]) => new Uint8Array([...b, ...new Array(16).fill(0x20)]);
 const texte = (t: string) => new TextEncoder().encode(t);
@@ -43,5 +44,16 @@ describe("jeton de session", () => {
   it("n'est pas réémis à chaque requête", async () => {
     const j = await lireJeton(await signerJeton({ login: "agent", vs: 1, debut: maintenant() }));
     expect(await prolongerJeton(j!)).toBeNull();
+  });
+});
+
+describe("politique des mots de passe", () => {
+  it("refuse les mots de passe prévisibles", () => {
+    for (const mdp of ["Promofood2026", "Pr0m0f00d2026", "Azerty12345", "P@ssword2026", "Aaaaa1111bc"]) {
+      expect(controlerPolitique(mdp, "agent1")).not.toEqual([]);
+    }
+  });
+  it("accepte un mot de passe robuste", () => {
+    expect(controlerPolitique("Vh7kQm2xLp9w", "agent1")).toEqual([]);
   });
 });

@@ -6,6 +6,15 @@ const COUT_BCRYPT = 12;
 export const hacherMotDePasse = (mdp: string) => bcrypt.hash(mdp, COUT_BCRYPT);
 export const verifierMotDePasse = (mdp: string, hash: string) => bcrypt.compare(mdp, hash);
 
+// Mots et suites testés en premier par les attaquants (dictionnaires, nom de l'entreprise).
+const MOTS_INTERDITS = ["password", "motdepasse", "azerty", "qwerty", "123456", "abcdef", "admin", "bienvenue", "welcome", "promofood", "proxim", "neolia", "beesky", "appro", "tunis", "depot"];
+
+/** Mot de passe construit sur un mot courant ou une répétition (ex. « Promofood2026 », « Aaaa1111bb »). */
+export function estPrevisible(mdp: string) {
+  const m = mdp.toLowerCase().replace(/[@4]/g, "a").replace(/0/g, "o").replace(/[1!]/g, "i").replace(/3/g, "e").replace(/[$5]/g, "s");
+  return MOTS_INTERDITS.some((x) => m.includes(x) || mdp.toLowerCase().includes(x)) || /(.)\1{3,}/.test(mdp);
+}
+
 /** Retourne la liste des règles non respectées (vide si le mot de passe est acceptable). */
 export function controlerPolitique(mdp: string, login: string, longueurMin = 10): string[] {
   const erreurs: string[] = [];
@@ -15,6 +24,7 @@ export function controlerPolitique(mdp: string, login: string, longueurMin = 10)
   if (!/[A-Z]/.test(mdp)) erreurs.push("une majuscule");
   if (!/\d/.test(mdp)) erreurs.push("un chiffre");
   if (login && mdp.toLowerCase().includes(login.toLowerCase())) erreurs.push("ne pas contenir l'identifiant");
+  if (estPrevisible(mdp)) erreurs.push("aucun mot ou suite trop courant (nom de l'entreprise, azerty, 123456…)");
   return erreurs;
 }
 
