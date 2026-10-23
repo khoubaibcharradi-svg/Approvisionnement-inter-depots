@@ -7,7 +7,7 @@ import { BoutonSauvegarde } from "./bouton";
 const taille = (o: number) => (o > 1048576 ? `${(o / 1048576).toFixed(1)} Mo` : `${Math.ceil(o / 1024)} Ko`);
 
 export default async function PageSauvegardes() {
-  await exigerUtilisateur([ROLES.ADMINISTRATEUR]);
+  await exigerUtilisateur([ROLES.ADMIN_FULL]);
   const sauvegardes = listerSauvegardes();
   const journaux = listerJournaux().slice(0, 60);
   return (

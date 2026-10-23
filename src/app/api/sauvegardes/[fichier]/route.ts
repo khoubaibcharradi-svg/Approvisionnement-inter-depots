@@ -7,7 +7,7 @@ import { ROLES } from "@/lib/constantes";
 export async function GET(_: Request, { params }: { params: Promise<{ fichier: string }> }) {
   const u = await utilisateurCourant();
   const { fichier } = await params;
-  if (!u || u.role !== ROLES.ADMINISTRATEUR || u.doitChangerMotDePasse) {
+  if (!u || u.role !== ROLES.ADMIN_FULL || u.doitChangerMotDePasse) {
     await auditer({ action: "TELECHARGEMENT_SAUVEGARDE_REFUSE", login: u?.login, codeRole: u?.role, entite: "Sauvegarde", cleEntite: fichier.slice(0, 80), succes: false });
     return new Response("Accès refusé", { status: 403 });
   }

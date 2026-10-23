@@ -19,6 +19,7 @@ const LIBELLES_ROLES: Record<CodeRole, string> = {
   DIRECTEUR_LOGISTIQUE: "Directeur logistique",
   CHEF_DEPOT: "Chef dépôt Radès",
   ADMINISTRATEUR: "Administrateur (DGA)",
+  ADMIN_FULL: "Administrateur IT",
   AGENT_DEPOT: "Agent dépôt",
   CONSULTANT_CR: "Consultation comptes rendus",
 };

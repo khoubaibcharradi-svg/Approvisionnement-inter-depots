@@ -71,7 +71,7 @@ export async function majUtilisateur(saisie: unknown, aff: unknown): Promise<Res
   return executer(async () => {
     const s = fiche.parse(saisie);
     const nouvelles = affectations.parse(aff);
-    if (s.login === moi.login && s.codeRole !== ROLES.ADMINISTRATEUR) throw new Error("Vous ne pouvez pas retirer votre propre rôle d'administrateur.");
+    if (s.login === moi.login && s.codeRole !== moi.role) throw new Error("Vous ne pouvez pas retirer votre propre rôle d'administrateur.");
     if (s.codeRole === ROLES.SUPERVISEUR && nouvelles.some((a) => !a.codeDepot)) throw new Error("Un superviseur doit avoir un dépôt pour chaque canal.");
     const codeDepotAgent = await depotAgent(s);
     await prisma.$transaction(async (tx) => {

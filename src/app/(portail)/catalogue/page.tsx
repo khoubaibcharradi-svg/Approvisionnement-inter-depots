@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { prisma, Prisma } from "@/lib/prisma";
-import { ROLES, ROLES_VOIENT_STOCK } from "@/lib/constantes";
+import { ROLES, ROLES_VOIENT_STOCK, estAdministrateur } from "@/lib/constantes";
 import { LigneArticle, Imports } from "./composants";
 
 const TAILLE_PAGE = 100;
@@ -25,10 +25,10 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
 
   const voitStock = ROLES_VOIENT_STOCK.includes(u.role);
   const droits = {
-    code: u.role === ROLES.DIRECTEUR_COMMERCIAL || u.role === ROLES.ADMINISTRATEUR,
+    code: u.role === ROLES.DIRECTEUR_COMMERCIAL || estAdministrateur(u.role),
     logistique: u.role === ROLES.DIRECTEUR_LOGISTIQUE,
     quota: u.role === ROLES.DIRECTEUR_COMMERCIAL,
-    prix: u.role === ROLES.DIRECTEUR_LOGISTIQUE || u.role === ROLES.ADMINISTRATEUR,
+    prix: u.role === ROLES.DIRECTEUR_LOGISTIQUE || estAdministrateur(u.role),
   };
   const pages = Math.max(1, Math.ceil(total / TAILLE_PAGE));
   const lien = (n: number) => `/catalogue?${new URLSearchParams({ ...(q ? { q } : {}), ...(p.inactifs ? { inactifs: "1" } : {}), page: String(n) })}`;
