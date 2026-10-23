@@ -54,7 +54,7 @@ async function main() {
     await prisma.role.upsert({
       where: { code },
       create: { code, libelle, ordre: ++ordre, creePar: AUTEUR },
-      update: { libelle, ordre, modifiePar: AUTEUR },
+      update: {}, // libellé modifiable en base : jamais écrasé par un nouveau chargement
     });
   }
   for (const [i, c] of CANAUX.entries()) {

@@ -1,6 +1,7 @@
 import { exigerUtilisateur } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
-import { LIBELLES_ROLES, ROLES } from "@/lib/constantes";
+import { ROLES } from "@/lib/constantes";
+import { rolesAttribuables } from "@/lib/roles";
 import { FicheUtilisateur, NouvelUtilisateur } from "./composants";
 
 export default async function PageUtilisateurs() {
@@ -14,7 +15,7 @@ export default async function PageUtilisateurs() {
     prisma.depot.findMany({ where: { isActif: true }, orderBy: { libelle: "asc" } }),
   ]);
   const ref = {
-    roles: Object.entries(LIBELLES_ROLES).map(([code, libelle]) => ({ code, libelle })),
+    roles: await rolesAttribuables(),
     canaux: canaux.map((c) => ({ code: c.code, libelle: c.libelle })),
     depots: depots.map((d) => ({ code: d.code, libelle: d.libelle })),
   };
