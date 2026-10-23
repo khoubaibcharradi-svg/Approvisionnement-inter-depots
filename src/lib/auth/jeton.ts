@@ -2,9 +2,11 @@ import { SignJWT, jwtVerify } from "jose";
 
 /** Jeton de session signé (HS256). Utilisable aussi depuis proxy.ts : pas de dépendance à la base. */
 
-export const NOM_COOKIE = "appro_session";
+// Préfixe __Host- en production : cookie lié à ce seul domaine, en HTTPS, sur tout le site.
+export const NOM_COOKIE = process.env.NODE_ENV === "production" ? "__Host-appro_session" : "appro_session";
 
-export type ContenuJeton = { login: string; vs: number };
+/** `debut` : heure de connexion (secondes), pour borner la durée totale de la session. */
+export type ContenuJeton = { login: string; vs: number; debut: number };
 
 let avertissementAffiche = false;
 
@@ -25,24 +27,47 @@ function cle() {
   return new TextEncoder().encode(s);
 }
 
+/** Durée maximale d'une session, quelle que soit l'activité (SESSION_DUREE_HEURES, 10 h par défaut). */
 export const dureeSessionSecondes = () => Number(process.env.SESSION_DUREE_HEURES || 10) * 3600;
+/** Déconnexion après inactivité (SESSION_INACTIVITE_MINUTES, 30 min par défaut). */
+export const inactiviteSecondes = () => Number(process.env.SESSION_INACTIVITE_MINUTES || 30) * 60;
 
+/** Options du cookie : inaccessible au JavaScript, HTTPS uniquement en production, durée = inactivité tolérée. */
+export const optionsCookie = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: inactiviteSecondes(),
+});
+
+const maintenant = () => Math.floor(Date.now() / 1000);
+
+/** Expiration : fin de la fenêtre d'inactivité, sans dépasser la durée maximale depuis la connexion. */
 export async function signerJeton(c: ContenuJeton) {
-  return new SignJWT({ vs: c.vs })
+  const exp = Math.min(maintenant() + inactiviteSecondes(), c.debut + dureeSessionSecondes());
+  return new SignJWT({ vs: c.vs, debut: c.debut })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(c.login)
     .setIssuedAt()
-    .setExpirationTime(`${dureeSessionSecondes()}s`)
+    .setExpirationTime(exp)
     .sign(cle());
 }
 
-export async function lireJeton(jeton: string | undefined): Promise<ContenuJeton | null> {
+export async function lireJeton(jeton: string | undefined): Promise<(ContenuJeton & { exp: number }) | null> {
   if (!jeton) return null;
   try {
     const { payload } = await jwtVerify(jeton, cle(), { algorithms: ["HS256"] });
-    if (!payload.sub || typeof payload.vs !== "number") return null;
-    return { login: payload.sub, vs: payload.vs };
+    if (!payload.sub || typeof payload.vs !== "number" || typeof payload.debut !== "number" || typeof payload.exp !== "number") return null;
+    if (payload.debut + dureeSessionSecondes() <= maintenant()) return null;
+    return { login: payload.sub, vs: payload.vs, debut: payload.debut, exp: payload.exp };
   } catch {
     return null;
   }
+}
+
+/** Jeton prolongé si plus d'une minute s'est écoulée depuis son émission (activité de l'utilisateur), sinon null. */
+export async function prolongerJeton(c: ContenuJeton & { exp: number }) {
+  const cible = Math.min(maintenant() + inactiviteSecondes(), c.debut + dureeSessionSecondes());
+  return cible - c.exp > 60 ? signerJeton(c) : null;
 }

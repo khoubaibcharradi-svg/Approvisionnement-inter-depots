@@ -15,7 +15,8 @@ export default async function PageUtilisateurs() {
     prisma.depot.findMany({ where: { isActif: true }, orderBy: { libelle: "asc" } }),
   ]);
   const ref = {
-    roles: await rolesAttribuables(),
+    // Le rôle Administrateur IT n'est proposé qu'à un Administrateur IT.
+    roles: (await rolesAttribuables()).filter((r) => r.code !== ROLES.ADMIN_FULL || moi.role === ROLES.ADMIN_FULL),
     canaux: canaux.map((c) => ({ code: c.code, libelle: c.libelle })),
     depots: depots.map((d) => ({ code: d.code, libelle: d.libelle })),
   };

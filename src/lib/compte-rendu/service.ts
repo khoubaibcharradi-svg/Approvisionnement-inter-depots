@@ -10,6 +10,7 @@ import { prochainNumero } from "../compteur";
 import { parametreNombre } from "../parametres";
 import { ROLES, ROLES_LECTURE_COMPTES_RENDUS } from "../constantes";
 import { libelles } from "../referentiels";
+import { contenuConforme } from "../fichiers";
 import { valorisationDepot } from "./inventaire";
 import type { UtilisateurCourant } from "../auth/session";
 import {
@@ -576,6 +577,7 @@ export async function ajouterPiece(agent: UtilisateurCourant, numero: string, ru
   if (!typeMime) throw new ErreurCompteRendu("Format accepté : PDF, Excel, CSV, JPG ou PNG.");
   if (!fichier.size || fichier.size > TAILLE_MAX_PIECE) throw new ErreurCompteRendu("Fichier vide ou trop volumineux (8 Mo maximum).");
   const contenu = Buffer.from(await fichier.arrayBuffer());
+  if (!contenuConforme(ext, contenu)) throw new ErreurCompteRendu("Le contenu du fichier ne correspond pas à son extension : fichier refusé.");
   const sha256 = crypto.createHash("sha256").update(contenu).digest("hex");
 
   return prisma.$transaction(async (tx) => {

@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { contenuConforme } from "./fichiers";
 
 /** Lecture d'un fichier .xlsx ou .csv (séparateur ; ou ,) en tableau de lignes de cellules texte. */
 
@@ -63,7 +64,10 @@ export function lireCsv(texte: string): Ligne[] {
 }
 
 export async function lireTableur(nomFichier: string, contenu: ArrayBuffer): Promise<Ligne[]> {
-  const ext = nomFichier.toLowerCase().split(".").pop();
+  const ext = nomFichier.toLowerCase().split(".").pop() ?? "";
+  if ((ext === "xlsx" || ext === "csv") && !contenuConforme(ext, new Uint8Array(contenu))) {
+    throw new Error("Le contenu du fichier ne correspond pas à son extension : fichier refusé.");
+  }
   if (ext === "xlsx") return lireFeuilleXlsx(contenu);
   if (ext === "csv") return lireCsv(new TextDecoder("utf-8").decode(contenu));
   throw new Error("Format non pris en charge : utilisez un fichier .xlsx ou .csv");
