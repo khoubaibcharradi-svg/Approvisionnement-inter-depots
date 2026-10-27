@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Transaction } from "@/lib/prisma";
 import { auditer } from "@/lib/audit";
 import { journal } from "@/lib/journal";
 import { exigerUtilisateur } from "@/lib/auth/session";
@@ -24,9 +24,21 @@ const schemaMaj = z.object({
   pcb: z.number().int().min(1).max(10_000).nullable().optional(),
   stockPieces: z.number().int().min(0).max(100_000_000).optional(),
   quotaPieces: z.number().int().min(0).max(100_000_000).optional(),
-  prixRevient: z.number().finite().min(0).max(1_000_000).optional(),
+  /** Prix de revient par société : { codeSociete: dinars par pièce }. */
+  prix: z.record(z.string().max(30), z.number().finite().min(0).max(1_000_000)).optional(),
   isActif: z.boolean().optional(),
 });
+
+const arrondi = (x: number) => Math.round(x * 1000) / 1000;
+
+/** Enregistre le prix de revient d'un article pour une société. */
+function ecrirePrix(tx: Transaction, codeArticle: string, codeSociete: string, prixRevient: number, login: string, maintenant = new Date()) {
+  return tx.articlePrix.upsert({
+    where: { codeArticle_codeSociete: { codeArticle, codeSociete } },
+    create: { codeArticle, codeSociete, prixRevient, dateMajPrix: maintenant, creePar: login, modifiePar: login },
+    update: { prixRevient, dateMajPrix: maintenant, modifiePar: login, isActif: true, isDeleted: false, dateSuppression: null, supprimePar: null },
+  });
+}
 
 /** Mise à jour d'un article, chaque champ n'étant modifiable que par le rôle habilité (§3, module 6). */
 export async function majArticle(saisie: unknown): Promise<Resultat> {
@@ -41,7 +53,7 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
   if ((s.nouveauCode !== undefined || s.isActif !== undefined) && !(u.role === ROLES.DIRECTEUR_COMMERCIAL || estAdministrateur(u.role))) return refus("code SKU");
   if ((s.pcb !== undefined || s.stockPieces !== undefined) && u.role !== ROLES.DIRECTEUR_LOGISTIQUE) return refus("PCB / stock");
   if (s.quotaPieces !== undefined && u.role !== ROLES.DIRECTEUR_COMMERCIAL) return refus("quota");
-  if (s.prixRevient !== undefined && u.role !== ROLES.DIRECTEUR_LOGISTIQUE && !estAdministrateur(u.role)) return refus("prix de revient");
+  if (s.prix !== undefined && u.role !== ROLES.DIRECTEUR_LOGISTIQUE && !estAdministrateur(u.role)) return refus("prix de revient");
 
   try {
     const message = await prisma.$transaction(async (tx) => {
@@ -54,6 +66,18 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
       const quota = quotaPlafonne(s.quotaPieces ?? a.quotaPieces, stock);
       const code = s.nouveauCode && s.nouveauCode !== a.codeArticle ? s.nouveauCode : undefined;
       if (code && (await tx.article.findFirst({ where: { codeArticle: code } }))) throw new Error(`Le code ${code} existe déjà.`);
+      // Prix par société, écrits avant un éventuel changement de code (répercuté en cascade).
+      const prixAvant = Object.fromEntries((await tx.articlePrix.findMany({ where: { codeArticle: a.codeArticle } })).map((p) => [p.codeSociete, p.prixRevient.toNumber()]));
+      const prixApres = { ...prixAvant };
+      if (s.prix) {
+        const societes = new Set((await tx.societe.findMany({ where: { isActif: true }, select: { code: true } })).map((x) => x.code));
+        for (const [codeSociete, valeur] of Object.entries(s.prix)) {
+          if (!societes.has(codeSociete)) throw new Error(`Société inconnue ou inactive : ${codeSociete}`);
+          if (arrondi(valeur) === (prixAvant[codeSociete] ?? 0)) continue;
+          await ecrirePrix(tx, a.codeArticle, codeSociete, arrondi(valeur), u.login);
+          prixApres[codeSociete] = arrondi(valeur);
+        }
+      }
       const apres = await tx.article.update({
         where: { codeArticle: a.codeArticle },
         data: {
@@ -61,15 +85,14 @@ export async function majArticle(saisie: unknown): Promise<Resultat> {
           ...(s.pcb !== undefined ? { pcb: s.pcb } : {}),
           ...(s.stockPieces !== undefined ? { stockPieces: stock, dateMajStock: new Date(), sourceStock: `Saisie manuelle · ${u.login}` } : {}),
           ...(s.isActif !== undefined ? { isActif: s.isActif } : {}),
-          ...(s.prixRevient !== undefined && s.prixRevient !== a.prixRevient.toNumber() ? { prixRevient: s.prixRevient, dateMajPrix: new Date() } : {}),
           quotaPieces: quota,
           version: { increment: 1 },
           modifiePar: u.login,
         },
       });
       const champs = ["codeArticle", "pcb", "stockPieces", "quotaPieces", "isActif"] as const;
-      const avant = { ...Object.fromEntries(champs.map((c) => [c, a[c]])), prixRevient: a.prixRevient.toNumber() };
-      const nouveau = { ...Object.fromEntries(champs.map((c) => [c, apres[c]])), prixRevient: apres.prixRevient.toNumber() };
+      const avant = { ...Object.fromEntries(champs.map((c) => [c, a[c]])), prix: prixAvant };
+      const nouveau = { ...Object.fromEntries(champs.map((c) => [c, apres[c]])), prix: prixApres };
       await auditer({ action: "ARTICLE_MODIFIE", login: u.login, codeRole: u.role, entite: "Article", cleEntite: a.codeArticle, avant, apres: nouveau }, tx);
       return quota < (s.quotaPieces ?? a.quotaPieces) ? `Enregistré · quota ramené au stock (${quota}).` : "Enregistré.";
     });
@@ -188,10 +211,12 @@ export async function importerStock(_: Resultat | null, form: FormData): Promise
   }
 }
 
-/** Import des prix de revient : Code article, Prix de revient (dinars par pièce). */
+/** Import des prix de revient d'une société : Code article, Prix de revient (dinars par pièce). */
 export async function importerPrix(_: Resultat | null, form: FormData): Promise<Resultat> {
   const u = await exigerUtilisateur([ROLES.DIRECTEUR_LOGISTIQUE, ROLES.ADMINISTRATEUR]);
   try {
+    const societe = await prisma.societe.findFirst({ where: { code: String(form.get("societe") ?? "").slice(0, 30), isActif: true } });
+    if (!societe) return { ok: false, message: "Choisissez la société à laquelle s'appliquent ces prix." };
     const { nom, lignes } = await lireFichier(form);
     const r = await prisma.$transaction(
       async (tx) => {
@@ -207,23 +232,21 @@ export async function importerPrix(_: Resultat | null, form: FormData): Promise<
             if (rejets.length < 50) rejets.push(`ligne ${i + 2} : ${!a ? `article inconnu ${code}` : "prix invalide"}`);
             continue;
           }
-          await tx.article.update({
-            where: { codeArticle: code },
-            data: { prixRevient: Math.round(prix * 1000) / 1000, dateMajPrix: maintenant, version: { increment: 1 }, modifiePar: u.login },
-          });
+          await ecrirePrix(tx, code, societe.code, arrondi(prix), u.login, maintenant);
+          await tx.article.update({ where: { codeArticle: code }, data: { version: { increment: 1 }, modifiePar: u.login } });
           majs++;
         }
         const numero = await prochainNumero(tx, "IMPORT", "IMP");
         await tx.importFichier.create({
-          data: { numero, type: "PRIX", nomFichier: nom, login: u.login, nbLignes: lignes.length, nbMisAJour: majs, nbIgnores: ignores, detail: rejets, creePar: u.login },
+          data: { numero, type: "PRIX", nomFichier: `${societe.libelle} · ${nom}`.slice(0, 255), login: u.login, nbLignes: lignes.length, nbMisAJour: majs, nbIgnores: ignores, detail: rejets, creePar: u.login },
         });
-        await auditer({ action: "IMPORT_PRIX_REVIENT", login: u.login, codeRole: u.role, entite: "ImportFichier", cleEntite: numero, apres: { fichier: nom, majs, ignores }, detail: rejets.join(" ; ") || undefined }, tx);
+        await auditer({ action: "IMPORT_PRIX_REVIENT", login: u.login, codeRole: u.role, entite: "ImportFichier", cleEntite: numero, apres: { societe: societe.code, fichier: nom, majs, ignores }, detail: rejets.join(" ; ") || undefined }, tx);
         return { numero, majs, ignores };
       },
       { timeout: 120_000 },
     );
     revalidatePath("/catalogue");
-    return { ok: true, message: `${r.numero} : ${r.majs} prix mis à jour, ${r.ignores} ignorés.` };
+    return { ok: true, message: `${r.numero} : ${r.majs} prix ${societe.libelle} mis à jour, ${r.ignores} ignorés.` };
   } catch (e) {
     journal.warn("Import des prix en échec", { erreur: e, login: u.login });
     return { ok: false, message: messagePublic(e, "Import") };

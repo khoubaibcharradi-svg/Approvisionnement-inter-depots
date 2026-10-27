@@ -22,6 +22,7 @@ const MODELES_SUPPRESSION_LOGIQUE = new Set([
   "ImportFichier",
   "Parametre",
   "Societe",
+  "ArticlePrix",
   "Magasin",
   "Vehicule",
   "CompteRendu",

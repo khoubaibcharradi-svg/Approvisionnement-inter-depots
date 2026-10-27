@@ -180,9 +180,6 @@ model Article {
   stockPieces      Int       @default(0)
   quotaPieces      Int       @default(0)
   rotationCartons  Decimal?  @db.Decimal(12, 2)
-  /// Coût de revient unitaire (dinars par pièce), base de la valorisation des inventaires.
-  prixRevient      Decimal   @default(0) @db.Decimal(14, 3)
-  dateMajPrix      DateTime?
   dateMajStock     DateTime?
   sourceStock      String?   @db.VarChar(150)
   version          Int       @default(0)
@@ -198,6 +195,7 @@ model Article {
   famille     Famille           @relation(fields: [codeFamille], references: [code], onUpdate: Cascade, onDelete: Restrict)
   lignes      LigneDemande[]
   inventaires InventaireLigne[]
+  prix        ArticlePrix[]
 
   @@index([codeFamille])
   @@index([designation])
@@ -391,8 +389,33 @@ model Societe {
   supprimePar      String?   @db.VarChar(50)
 
   magasins Magasin[]
+  prix     ArticlePrix[]
 
   @@map("societe")
+}
+
+/// Coût de revient unitaire d'un article pour une société (dinars par pièce) : chaque société a le sien.
+/// Base de la valorisation des inventaires des magasins de cette société.
+model ArticlePrix {
+  codeArticle      String    @db.VarChar(30)
+  codeSociete      String    @db.VarChar(30)
+  prixRevient      Decimal   @default(0) @db.Decimal(14, 3)
+  dateMajPrix      DateTime?
+  isActif          Boolean   @default(true)
+  isDeleted        Boolean   @default(false)
+  dateCreation     DateTime  @default(now())
+  creePar          String?   @db.VarChar(50)
+  dateModification DateTime  @updatedAt
+  modifiePar       String?   @db.VarChar(50)
+  dateSuppression  DateTime?
+  supprimePar      String?   @db.VarChar(50)
+
+  article Article @relation(fields: [codeArticle], references: [codeArticle], onUpdate: Cascade, onDelete: Restrict)
+  societe Societe @relation(fields: [codeSociete], references: [code], onUpdate: Cascade, onDelete: Restrict)
+
+  @@id([codeArticle, codeSociete])
+  @@index([codeSociete])
+  @@map("prix_revient")
 }
 
 /// Magasin d'un dépôt, appartenant à une société (Promofood, Beesky…).
@@ -555,7 +578,7 @@ model InventaireLigne {
   /// Null tant que l'article n'a pas été compté.
   stockFinalReel      Decimal?  @db.Decimal(14, 3)
   ecart               Decimal   @default(0) @db.Decimal(14, 3)
-  /// Prix de revient appliqué (figé au moment de la saisie).
+  /// Prix de revient de la société du magasin, figé au moment de la saisie.
   prixRevient         Decimal   @default(0) @db.Decimal(14, 3)
   loginAgent          String    @db.VarChar(50)
   isActif             Boolean   @default(true)
