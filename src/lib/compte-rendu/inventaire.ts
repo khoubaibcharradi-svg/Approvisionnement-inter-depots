@@ -214,7 +214,10 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
       if (action.type === "VALIDER" && figees.has(action.etape)) throw new ErreurCompteRendu(`Étape « ${lib[action.etape]} » déjà validée.`);
       if (action.type === "ANNULER_VALIDATION" && !avant[action.etape].validee) throw new ErreurCompteRendu(`Étape « ${lib[action.etape]} » non validée.`);
 
-      const articles = new Map((await tx.article.findMany({ where: { codeArticle: { in: saisie.map((l) => l.codeArticle) } } })).map((a) => [a.codeArticle, a]));
+      const codes = saisie.map((l) => l.codeArticle);
+      const articles = new Map((await tx.article.findMany({ where: { codeArticle: { in: codes } } })).map((a) => [a.codeArticle, a]));
+      // Prix de revient de la société du magasin (chaque société a le sien).
+      const prix = new Map((await tx.articlePrix.findMany({ where: { codeSociete: magasin.codeSociete, codeArticle: { in: codes } } })).map((p) => [p.codeArticle, p.prixRevient]));
       const precedent = await inventairePrecedent(tx, codeMagasin, dateJournee);
       const anciennes = new Map((await tx.inventaireLigne.findMany({ where: cle })).map((l) => [l.codeArticle, l]));
       const aGarder: string[] = [];
@@ -239,7 +242,7 @@ export async function enregistrerInventaire(agent: UtilisateurCourant, dateJourn
           stockFinalTheorique: calc.stockFinalTheorique,
           stockFinalReel: l.stockFinalReel,
           ecart: calc.ecart ?? 0,
-          prixRevient: a.prixRevient,
+          prixRevient: prix.get(l.codeArticle) ?? 0,
           loginAgent: agent.login,
         };
         await tx.inventaireLigne.upsert({

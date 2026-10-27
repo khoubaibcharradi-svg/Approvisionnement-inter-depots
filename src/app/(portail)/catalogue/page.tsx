@@ -15,12 +15,14 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
     ...(p.inactifs ? {} : { isActif: true }),
     ...(q ? { OR: [{ codeArticle: { contains: q } }, { designation: { contains: q } }, { famille: { libelle: { contains: q } } }] } : {}),
   };
+  // Chaque société a son propre prix de revient : une colonne par société active.
+  const societes = await prisma.societe.findMany({ where: { isActif: true }, orderBy: [{ ordre: "asc" }, { libelle: "asc" }], select: { code: true, libelle: true } });
   const [total, articles, sansPcb, majStock, sansPrix] = await Promise.all([
     prisma.article.count({ where }),
-    prisma.article.findMany({ where, include: { famille: true }, orderBy: [{ codeFamille: "asc" }, { designation: "asc" }], skip: (page - 1) * TAILLE_PAGE, take: TAILLE_PAGE }),
+    prisma.article.findMany({ where, include: { famille: true, prix: { where: { isDeleted: false } } }, orderBy: [{ codeFamille: "asc" }, { designation: "asc" }], skip: (page - 1) * TAILLE_PAGE, take: TAILLE_PAGE }),
     prisma.article.count({ where: { pcb: null, isActif: true } }),
     prisma.article.findFirst({ where: { dateMajStock: { not: null } }, orderBy: { dateMajStock: "desc" }, select: { dateMajStock: true, sourceStock: true } }),
-    prisma.article.count({ where: { prixRevient: 0, isActif: true } }),
+    prisma.article.count({ where: { isActif: true, OR: societes.map((s) => ({ prix: { none: { codeSociete: s.code, isDeleted: false, prixRevient: { gt: 0 } } } })) } }),
   ]);
 
   const voitStock = ROLES_VOIENT_STOCK.includes(u.role);
@@ -42,11 +44,11 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
           <p className="note">Stock (dépôt central Radès) mis à jour le {majStock.dateMajStock.toLocaleString("fr-FR")} · source : {majStock.sourceStock}</p>
         )}
         {droits.logistique && sansPcb > 0 && <p className="alerte-erreur mt-2">PCB à renseigner pour {sansPcb} articles (1 pièce par carton en attendant).</p>}
-        {voitStock && sansPrix > 0 && <p className="note text-amber-700">{sansPrix} article(s) actif(s) sans prix de revient : ils sont valorisés à 0 dans les comptes rendus des dépôts.</p>}
+        {voitStock && sansPrix > 0 && <p className="note text-amber-700">{sansPrix} article(s) actif(s) sans prix de revient pour au moins une société : ils sont valorisés à 0 dans les inventaires des magasins de cette société.</p>}
         {voitStock && <p className="note">Stock et quota en pièces ; rotation en cartons par mois. Le quota ne peut pas dépasser le stock.</p>}
       </div>
 
-      <Imports catalogue={droits.code} stock={droits.logistique} prix={droits.prix} />
+      <Imports catalogue={droits.code} stock={droits.logistique} prix={droits.prix} societes={societes} />
 
       <form className="flex flex-wrap gap-2">
         <input name="q" defaultValue={q} placeholder="Rechercher code, désignation, famille" className="champ min-w-72" />
@@ -61,7 +63,7 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
           <thead>
             <tr>
               <th>Code SKU</th><th>Désignation</th><th>Famille</th><th>Pièces / carton</th>
-              {voitStock && <><th>Rotation (crt/mois)</th><th>Stock (pièces)</th><th>Quota (pièces)</th><th>Prix de revient (DT/pièce)</th></>}
+              {voitStock && <><th>Rotation (crt/mois)</th><th>Stock (pièces)</th><th>Quota (pièces)</th>{societes.map((s) => <th key={s.code} className="text-right">Prix de revient<br />{s.libelle} (DT/pièce)</th>)}</>}
               {(droits.code || droits.logistique || droits.quota || droits.prix) && <th></th>}
             </tr>
           </thead>
@@ -76,10 +78,11 @@ export default async function PageCatalogue({ searchParams }: { searchParams: Pr
                   pcb: a.pcb,
                   version: a.version,
                   isActif: a.isActif,
-                  ...(voitStock ? { stockPieces: a.stockPieces, quotaPieces: a.quotaPieces, rotation: a.rotationCartons?.toNumber() ?? null, prixRevient: a.prixRevient.toNumber() } : {}),
+                  ...(voitStock ? { stockPieces: a.stockPieces, quotaPieces: a.quotaPieces, rotation: a.rotationCartons?.toNumber() ?? null, prix: Object.fromEntries(a.prix.map((x) => [x.codeSociete, x.prixRevient.toNumber()])) } : {}),
                 }}
                 voitStock={voitStock}
                 droits={droits}
+                societes={societes}
               />
             ))}
           </tbody>
