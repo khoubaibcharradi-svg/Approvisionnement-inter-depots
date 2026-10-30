@@ -131,6 +131,36 @@ const rempli = (t: string | null | undefined) => (t ?? "").trim().length >= 2;
 const montantValide = (v: Montant) => v !== null && Number.isFinite(v) && v >= 0;
 
 /**
+ * Incohérences bloquantes avant soumission (valeurs contradictoires ou impossibles).
+ * Contrairement aux champs non renseignés (controlerCompletude), elles empêchent la soumission.
+ */
+export function controlerCoherence(s: SaisieCompteRendu) {
+  const e: string[] = [];
+  const negatif = (v: Montant) => v !== null && Number.isFinite(v) && v < 0;
+  s.stocks.forEach((l) => {
+    if ([l.stockInitial, l.receptions, l.ventes, l.retours, l.stockFinalReel].some(negatif)) e.push(`Stock ${l.codeMagasin} : les quantités ne peuvent pas être négatives.`);
+  });
+  if (s.aucunVehicule && s.vehicules.length) e.push("Véhicules : décochez « aucun véhicule » ou supprimez les lignes saisies.");
+  s.vehicules.forEach((v, i) => {
+    if (HEURE.test(v.heureEntree) && HEURE.test(v.heureSortie) && v.heureSortie < v.heureEntree) e.push(`Véhicule ${i + 1} : heure de sortie avant l'heure d'entrée.`);
+  });
+  s.recettes.forEach((r, i) => {
+    if ([r.caComptant, r.recouvrement, r.caCredit, r.recette].some(negatif)) e.push(`Recette ${i + 1} : les montants ne peuvent pas être négatifs.`);
+  });
+  for (const l of s.caisses) {
+    if ([l.soldeVeille, l.encaissements, l.transferts, l.soldeReel].some(negatif)) e.push(`Récapitulatif caisse ${l.nature} : les montants ne peuvent pas être négatifs.`);
+  }
+  s.depenses.forEach((d, i) => {
+    const debit = d.debit ?? 0;
+    const credit = d.credit ?? 0;
+    if (debit < 0 || credit < 0) e.push(`Dépense ${i + 1} : montants négatifs interdits.`);
+    else if (debit > 0 && credit > 0) e.push(`Dépense ${i + 1} : renseignez soit un débit (entrée), soit un crédit (sortie), pas les deux.`);
+  });
+  if (calculerDepenses(s.soldeVeilleDepenses, s.depenses).soldeFinal < 0) e.push("Caisse dépenses : le solde ne peut pas devenir négatif.");
+  return e;
+}
+
+/**
  * Contrôle de complétude avant soumission. Retourne la liste des manques (vide = complet).
  * Les champs texte obligatoires acceptent « RAS » quand il n'y a rien à signaler.
  */
@@ -154,7 +184,6 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
     e.push("Stock : la justification des écarts est obligatoire lorsqu'un écart existe.");
   }
 
-  if (s.aucunVehicule && s.vehicules.length) e.push("Véhicules : décochez « aucun véhicule » ou supprimez les lignes saisies.");
   if (!s.aucunVehicule && !s.vehicules.length) e.push("Véhicules : saisissez au moins un véhicule ou cochez « aucun véhicule traité ».");
   s.vehicules.forEach((v, i) => {
     const n = i + 1;
@@ -163,7 +192,7 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
     if (!rempli(v.vendeurChauffeur)) e.push(`Véhicule ${n} : vendeur / chauffeur manquant.`);
     if (!HEURE.test(v.heureEntree)) e.push(`Véhicule ${n} : heure d'entrée manquante.`);
     if (!HEURE.test(v.heureSortie)) e.push(`Véhicule ${n} : heure de sortie manquante.`);
-    else if (HEURE.test(v.heureEntree) && v.heureSortie < v.heureEntree) e.push(`Véhicule ${n} : heure de sortie avant l'heure d'entrée.`);
+
   });
 
   if (!s.recettes.length) e.push("Caisse recettes : saisissez au moins une ligne.");
@@ -215,11 +244,9 @@ export function controlerCompletude(s: SaisieCompteRendu, o: { nbPieces: number;
     if (!rempli(d.libelle)) e.push(`Dépense ${n} : libellé manquant.`);
     const debit = d.debit ?? 0;
     const credit = d.credit ?? 0;
-    if (debit < 0 || credit < 0) e.push(`Dépense ${n} : montants négatifs interdits.`);
-    if ((debit > 0) === (credit > 0)) e.push(`Dépense ${n} : renseignez soit un débit (entrée), soit un crédit (sortie).`);
+    if (debit === 0 && credit === 0) e.push(`Dépense ${n} : renseignez un débit (entrée) ou un crédit (sortie).`);
     if (!rempli(d.validePar)) e.push(`Dépense ${n} : « validé par » manquant.`);
   });
-  if (calculerDepenses(s.soldeVeilleDepenses, s.depenses).soldeFinal < 0) e.push("Caisse dépenses : le solde ne peut pas devenir négatif.");
   if (!rempli(s.observationsDepenses)) e.push("Caisse dépenses : observations obligatoires (« RAS » si rien à signaler).");
 
   if (!rempli(s.etatCameras)) e.push("Sécurité : état des caméras de surveillance obligatoire.");

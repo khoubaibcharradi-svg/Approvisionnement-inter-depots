@@ -8,6 +8,7 @@ import {
   calculerDepenses,
   calculerRecette,
   calculerStock,
+  controlerCoherence,
   controlerCompletude,
   totaux,
   type SaisieCompteRendu,
@@ -107,6 +108,8 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
   // Champs non renseignés : une fenêtre les détaille ; l'agent peut compléter ou soumettre quand même (champs considérés vides).
   const [alerteManques, setAlerteManques] = useState<string[] | null>(null);
   const soumettre = async () => {
+    const incoherences = controlerCoherence(s);
+    if (incoherences.length) return setMessage({ ok: false, texte: `Compte rendu incohérent :\n• ${incoherences.join("\n• ")}` });
     const manques = [...j.inventaire.manques, ...controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire, natures: j.libellesNatures })];
     if (manques.length) return setAlerteManques(manques);
     if (!confirm("Soumettre le compte rendu ? Il ne sera plus modifiable.")) return;

@@ -19,6 +19,7 @@ import {
   calculerDepenses,
   calculerRecette,
   calculerStock,
+  controlerCoherence,
   controlerCompletude,
   totaux,
   type SaisieCompteRendu,
@@ -393,6 +394,10 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
 
       // Champs non renseignés : l'agent en est averti à l'écran et confirme ; la soumission n'est pas bloquée,
       // les champs vides sont considérés comme vides. La liste est conservée dans le journal d'audit.
+      if (soumettre) {
+        const incoherences = controlerCoherence(saisie);
+        if (incoherences.length) throw new ErreurCompteRendu(`Compte rendu incohérent :\n• ${incoherences.join("\n• ")}`);
+      }
       const manques = soumettre
         ? [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire, natures: { ...(await libelles("NATURE_CAISSE")) } })]
         : [];
