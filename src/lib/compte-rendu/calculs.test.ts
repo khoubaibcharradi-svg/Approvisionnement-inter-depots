@@ -7,6 +7,7 @@ import {
   calculerDepenses,
   calculerRecette,
   calculerStock,
+  controlerCoherence,
   controlerCompletude,
   NATURES_CAISSE,
   totaux,
@@ -82,17 +83,26 @@ describe("complétude", () => {
     s.aucunVehicule = true;
     expect(controlerCompletude(s, ok)).toEqual([]);
   });
-  it("refuse les champs vides, les heures incohérentes et une dépense à la fois débit et crédit", () => {
+  it("signale les champs non renseignés (non bloquant)", () => {
     const s = complet();
     s.stocks[0].ventes = null;
-    s.vehicules[0].heureSortie = "06:00";
-    s.depenses[0].debit = 10;
     s.remarques = "";
     const e = controlerCompletude(s, ok).join("\n");
     expect(e).toMatch(/ventes/);
-    expect(e).toMatch(/sortie avant/);
-    expect(e).toMatch(/soit un débit/);
     expect(e).toMatch(/incidents/);
+    expect(controlerCoherence(s)).toEqual([]);
+  });
+  it("bloque les incohérences : heures inversées, débit et crédit, montant négatif, solde négatif", () => {
+    const s = complet();
+    expect(controlerCoherence(s)).toEqual([]);
+    s.vehicules[0].heureSortie = "06:00";
+    s.depenses[0].debit = 10;
+    s.depenses[0].credit = 5;
+    s.stocks[0].ventes = -1;
+    const e = controlerCoherence(s).join("\n");
+    expect(e).toMatch(/sortie avant/);
+    expect(e).toMatch(/pas les deux/);
+    expect(e).toMatch(/négatives/);
   });
   it("écart de caisse : justification obligatoire sur la ligne", () => {
     const s = complet();

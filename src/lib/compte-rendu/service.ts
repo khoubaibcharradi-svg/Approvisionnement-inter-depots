@@ -19,6 +19,7 @@ import {
   calculerDepenses,
   calculerRecette,
   calculerStock,
+  controlerCoherence,
   controlerCompletude,
   totaux,
   type SaisieCompteRendu,
@@ -391,10 +392,15 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
       if (cr?.statut === "SOUMIS") throw new ErreurCompteRendu("Ce compte rendu est déjà soumis : il n'est plus modifiable.");
       if (cr && cr.version !== version) throw new ErreurCompteRendu("Le compte rendu a été modifié entre-temps (autre agent du dépôt). Rechargez la page.");
 
+      // Champs non renseignés : l'agent en est averti à l'écran et confirme ; la soumission n'est pas bloquée,
+      // les champs vides sont considérés comme vides. La liste est conservée dans le journal d'audit.
       if (soumettre) {
-        const manques = [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire, natures: { ...(await libelles("NATURE_CAISSE")) } })];
-        if (manques.length) throw new ErreurCompteRendu(`Compte rendu incomplet :\n• ${manques.join("\n• ")}`);
+        const incoherences = controlerCoherence(saisie);
+        if (incoherences.length) throw new ErreurCompteRendu(`Compte rendu incohérent :\n• ${incoherences.join("\n• ")}`);
       }
+      const manques = soumettre
+        ? [...inventaire.manques, ...controlerCompletude(saisie, { nbPieces: cr?.pieces.length ?? 0, pieceObligatoire, natures: { ...(await libelles("NATURE_CAISSE")) } })]
+        : [];
 
       const depenses = calculerDepenses(saisie.soldeVeilleDepenses, saisie.depenses);
       const entete = {
@@ -526,6 +532,7 @@ export async function enregistrer(agent: UtilisateurCourant, dateJournee: string
           apres: {
             depot: codeDepot,
             journee: dateJournee,
+            ...(manques.length ? { champsNonRenseignes: manques } : {}),
             ecartStock: t.stock.ecart,
             ecartRecettes: t.recettes.ecart,
             ecartCaisse: t.caisse.ecart,
