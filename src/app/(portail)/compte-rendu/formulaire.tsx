@@ -8,6 +8,7 @@ import {
   calculerDepenses,
   calculerRecette,
   calculerStock,
+  controlerCoherence,
   controlerCompletude,
   totaux,
   type SaisieCompteRendu,
@@ -104,13 +105,18 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
       }),
     );
 
+  // Champs non renseignés : une fenêtre les détaille ; l'agent peut compléter ou soumettre quand même (champs considérés vides).
+  const [alerteManques, setAlerteManques] = useState<string[] | null>(null);
   const soumettre = async () => {
+    const incoherences = controlerCoherence(s);
+    if (incoherences.length) return setMessage({ ok: false, texte: `Compte rendu incohérent :\n• ${incoherences.join("\n• ")}` });
     const manques = [...j.inventaire.manques, ...controlerCompletude(s, { nbPieces: piecesStock, pieceObligatoire: j.pieceObligatoire, natures: j.libellesNatures })];
-    if (manques.length) {
-      setMessage({ ok: false, texte: `Compte rendu incomplet :\n• ${manques.join("\n• ")}` });
-      return;
-    }
+    if (manques.length) return setAlerteManques(manques);
     if (!confirm("Soumettre le compte rendu ? Il ne sera plus modifiable.")) return;
+    await sauver(true);
+  };
+  const soumettreQuandMeme = async () => {
+    setAlerteManques(null);
     await sauver(true);
   };
 
@@ -394,6 +400,22 @@ export function FormulaireCompteRendu({ journee: j }: { journee: JourneeCompteRe
         <Texte label="Ressources humaines (présences / absences / retards)" valeur={s.ressourcesHumaines} lecture={lecture} placeholder="Ex. 6 présents, 1 absent (congé), aucun retard" onChange={(v) => maj({ ressourcesHumaines: v })} />
         <Texte label="Remarques / incidents du jour" valeur={s.remarques} lecture={lecture} lignes={3} onChange={(v) => maj({ remarques: v })} />
       </Section>
+
+      {alerteManques && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="alertdialog" aria-modal="true" aria-labelledby="titre-manques">
+          <div className="flex max-h-[85vh] w-full max-w-xl flex-col gap-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 id="titre-manques" className="text-lg font-semibold text-amber-800">⚠ {alerteManques.length} champ(s) non renseigné(s)</h2>
+            <p className="note">Si vous soumettez maintenant, ces champs seront considérés comme vides et le compte rendu ne sera plus modifiable.</p>
+            <ul className="list-disc space-y-1 overflow-y-auto pl-5 text-sm">
+              {alerteManques.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button className="btn-secondaire" autoFocus onClick={() => setAlerteManques(null)}>Revenir et compléter</button>
+              <button className="btn" disabled={enCours} onClick={soumettreQuandMeme}>Soumettre quand même</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && <p className={`${message.ok ? "alerte-ok" : "alerte-erreur"} whitespace-pre-line`}>{message.texte}</p>}
 
